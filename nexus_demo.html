@@ -45,6 +45,245 @@
             z-index: 1;
         }
 
+        #auth-layer {
+            position: fixed;
+            inset: 0;
+            z-index: 3;
+            display: grid;
+            place-items: center;
+            padding: 24px;
+            background:
+                linear-gradient(180deg, rgba(2, 6, 14, 0.76), rgba(2, 6, 14, 0.92)),
+                radial-gradient(circle at top, rgba(121, 255, 225, 0.12), transparent 28%);
+            backdrop-filter: blur(14px);
+        }
+
+        #auth-layer.hidden {
+            display: none;
+        }
+
+        .auth-shell {
+            width: min(1080px, 100%);
+            display: grid;
+            grid-template-columns: minmax(0, 1.15fr) minmax(320px, 420px);
+            gap: 20px;
+            align-items: stretch;
+        }
+
+        .auth-panel,
+        .auth-card {
+            border-radius: 32px;
+            border: 1px solid var(--border);
+            box-shadow: var(--shadow);
+            backdrop-filter: blur(18px);
+        }
+
+        .auth-panel {
+            padding: 28px;
+            background:
+                linear-gradient(180deg, rgba(9, 20, 36, 0.86), rgba(4, 11, 20, 0.94)),
+                radial-gradient(circle at top left, rgba(121, 255, 225, 0.12), transparent 32%);
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            gap: 24px;
+        }
+
+        .auth-card {
+            padding: 24px;
+            background: linear-gradient(180deg, rgba(9, 18, 32, 0.95), rgba(5, 10, 20, 0.95));
+            display: flex;
+            flex-direction: column;
+            gap: 18px;
+        }
+
+        .auth-title {
+            margin: 0;
+            font-family: "Space Grotesk", sans-serif;
+            font-size: clamp(2rem, 4vw, 3.3rem);
+            line-height: 0.95;
+            letter-spacing: -0.04em;
+        }
+
+        .auth-subtitle {
+            margin: 0;
+            color: var(--muted);
+            font-size: 1rem;
+            line-height: 1.6;
+        }
+
+        .auth-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 12px;
+        }
+
+        .auth-metric {
+            padding: 16px;
+            border-radius: 20px;
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(140, 200, 255, 0.12);
+        }
+
+        .auth-metric strong {
+            display: block;
+            font-family: "Space Grotesk", sans-serif;
+            font-size: 1.2rem;
+            color: var(--text);
+        }
+
+        .auth-metric span {
+            display: block;
+            margin-top: 4px;
+            color: var(--muted);
+            font-size: 13px;
+        }
+
+        .auth-highlight {
+            padding: 16px 18px;
+            border-radius: 22px;
+            background: linear-gradient(135deg, rgba(121, 255, 225, 0.12), rgba(140, 200, 255, 0.07));
+            border: 1px solid rgba(121, 255, 225, 0.18);
+            color: var(--text);
+        }
+
+        .auth-highlight strong {
+            display: block;
+            margin-bottom: 8px;
+            color: var(--accent);
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            font-size: 12px;
+        }
+
+        .auth-card-head h2 {
+            margin: 0;
+            font-family: "Space Grotesk", sans-serif;
+            font-size: 1.45rem;
+        }
+
+        .auth-card-head p {
+            margin: 8px 0 0;
+            color: var(--muted);
+            line-height: 1.55;
+            font-size: 14px;
+        }
+
+        .auth-form {
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+        }
+
+        .auth-field {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .auth-field label {
+            color: var(--muted);
+            font-size: 13px;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+        }
+
+        .auth-field input {
+            padding: 15px 16px;
+            border-radius: 16px;
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(121, 255, 225, 0.16);
+        }
+
+        .auth-actions,
+        .auth-secondary {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .secondary-button {
+            background: rgba(255, 255, 255, 0.06);
+            color: var(--text);
+            border: 1px solid rgba(121, 255, 225, 0.14);
+        }
+
+        .secondary-button:hover:not(:disabled) {
+            background: rgba(121, 255, 225, 0.1);
+        }
+
+        .auth-toggle {
+            display: flex;
+            gap: 8px;
+            padding: 4px;
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(121, 255, 225, 0.12);
+        }
+
+        .auth-tab {
+            flex: 1;
+            padding: 10px 14px;
+            border-radius: 999px;
+            background: transparent;
+            color: var(--muted);
+            border: none;
+            box-shadow: none;
+        }
+
+        .auth-tab.active {
+            background: linear-gradient(135deg, #6fffd1, #8fdcff);
+            color: #051017;
+        }
+
+        .auth-message,
+        .auth-hint,
+        .generated-password {
+            padding: 14px 16px;
+            border-radius: 16px;
+            line-height: 1.5;
+            font-size: 14px;
+        }
+
+        .auth-message {
+            background: rgba(255, 188, 109, 0.08);
+            border: 1px solid rgba(255, 188, 109, 0.18);
+            color: #ffd6a0;
+            display: none;
+        }
+
+        .auth-message.visible {
+            display: block;
+        }
+
+        .auth-hint {
+            background: rgba(140, 200, 255, 0.08);
+            border: 1px solid rgba(140, 200, 255, 0.18);
+            color: var(--muted);
+        }
+
+        .generated-password {
+            background: rgba(121, 255, 225, 0.08);
+            border: 1px solid rgba(121, 255, 225, 0.18);
+            color: var(--text);
+            display: none;
+        }
+
+        .generated-password.visible {
+            display: block;
+        }
+
+        .generated-password code {
+            display: inline-block;
+            margin-top: 8px;
+            padding: 8px 10px;
+            border-radius: 12px;
+            background: rgba(255, 255, 255, 0.07);
+            color: var(--accent);
+            font-size: 15px;
+            word-break: break-all;
+        }
+
         #ui-layer {
             position: fixed;
             inset: 0;
@@ -197,6 +436,13 @@
             border: 1px solid rgba(140, 200, 255, 0.16);
             color: var(--accent-2);
             font-size: 12px;
+        }
+
+        .control-row {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
         }
 
         #topic-image-frame {
@@ -388,6 +634,10 @@
                 max-width: none;
             }
 
+            .auth-shell {
+                grid-template-columns: 1fr;
+            }
+
             .panel {
                 margin-left: 0;
                 margin-top: auto;
@@ -397,6 +647,67 @@
 </head>
 <body>
     <div id="canvas-container"></div>
+    <div id="auth-layer">
+        <div class="auth-shell">
+            <section class="auth-panel">
+                <div>
+                    <div class="eyebrow">Private Access</div>
+                    <h1 class="auth-title">Sign in to your Nexus Learn workspace.</h1>
+                    <p class="auth-subtitle">Enter your email, generate a personal password, and unlock the live tutor, image panel, and 3D scene. This first version stores credentials locally in your browser for demo use.</p>
+                </div>
+                <div class="auth-grid">
+                    <div class="auth-metric">
+                        <strong>Email</strong>
+                        <span>Use the same email each time you return.</span>
+                    </div>
+                    <div class="auth-metric">
+                        <strong>Password</strong>
+                        <span>Generate a password once, then reuse it to sign in.</span>
+                    </div>
+                    <div class="auth-metric">
+                        <strong>Session</strong>
+                        <span>Your sign-in stays active on this browser until you sign out.</span>
+                    </div>
+                    <div class="auth-metric">
+                        <strong>Demo</strong>
+                        <span>No database or email delivery required for this version.</span>
+                    </div>
+                </div>
+                <div class="auth-highlight">
+                    <strong>How It Works</strong>
+                    Create access with your email, copy the generated password, and then use the sign-in tab whenever you come back to this device.
+                </div>
+            </section>
+
+            <section class="auth-card">
+                <div class="auth-card-head">
+                    <h2>Access Portal</h2>
+                    <p>Create a password for a new email or sign in with an existing one.</p>
+                </div>
+                <div class="auth-toggle">
+                    <button class="auth-tab active" id="create-tab" type="button">Create Access</button>
+                    <button class="auth-tab" id="login-tab" type="button">Sign In</button>
+                </div>
+                <div class="auth-message" id="auth-message"></div>
+                <div class="generated-password" id="generated-password"></div>
+                <div class="auth-hint" id="auth-hint">Use Create Access first for a new email. Sign In is for returning users on this browser.</div>
+                <form class="auth-form" id="auth-form">
+                    <div class="auth-field">
+                        <label for="auth-email">Email</label>
+                        <input id="auth-email" type="email" placeholder="you@example.com" autocomplete="email" required>
+                    </div>
+                    <div class="auth-field">
+                        <label for="auth-password">Password</label>
+                        <input id="auth-password" type="text" placeholder="Enter existing password or generate one below" autocomplete="current-password">
+                    </div>
+                    <div class="auth-actions">
+                        <button id="auth-submit" type="submit">Create Access</button>
+                        <button class="secondary-button" id="auth-generate" type="button">Generate Password</button>
+                    </div>
+                </form>
+            </section>
+        </div>
+    </div>
 
     <div id="ui-layer">
         <section class="hero">
@@ -448,7 +759,10 @@
                     <strong>Conversation</strong>
                     <span class="tiny-note">Ask anything and the scene will adapt in real time.</span>
                 </div>
-                <span class="section-pill">Interactive</span>
+                <div class="control-row">
+                    <span class="section-pill" id="session-pill">Interactive</span>
+                    <button class="secondary-button" id="signout-button" type="button">Sign Out</button>
+                </div>
             </div>
             <div id="chat-box">
                 <div class="msg ai">
@@ -465,6 +779,10 @@
     </div>
 
     <script>
+        const AUTH_STORAGE_KEY = 'nexuslearn-user';
+        const AUTH_SESSION_KEY = 'nexuslearn-session';
+        let authMode = 'create';
+
         const THEME_PRESETS = {
             generic: { backgroundTop: '#05121a', backgroundBottom: '#01040a' },
             space: { backgroundTop: '#080f28', backgroundBottom: '#01020b' },
@@ -566,6 +884,168 @@
         const targetState = { ...currentState };
         const clock = new THREE.Clock();
         let orbitAngle = 0;
+
+        function createPassword(length = 12) {
+            const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%';
+            const randomValues = new Uint32Array(length);
+            crypto.getRandomValues(randomValues);
+            return Array.from(randomValues, (value) => chars[value % chars.length]).join('');
+        }
+
+        function setAuthMessage(message = '', visible = false) {
+            const box = document.getElementById('auth-message');
+            box.textContent = message;
+            box.classList.toggle('visible', Boolean(visible && message));
+        }
+
+        function setGeneratedPassword(password = '') {
+            const box = document.getElementById('generated-password');
+            if (!password) {
+                box.classList.remove('visible');
+                box.innerHTML = '';
+                return;
+            }
+
+            box.classList.add('visible');
+            box.innerHTML = `Save this password now. You will need it to sign in later.<br><code>${password}</code>`;
+        }
+
+        function readStoredUser() {
+            try {
+                return JSON.parse(localStorage.getItem(AUTH_STORAGE_KEY) || 'null');
+            } catch (error) {
+                return null;
+            }
+        }
+
+        function saveStoredUser(user) {
+            localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(user));
+        }
+
+        function setSession(email) {
+            sessionStorage.setItem(AUTH_SESSION_KEY, email);
+        }
+
+        function clearSession() {
+            sessionStorage.removeItem(AUTH_SESSION_KEY);
+        }
+
+        function updateSessionPill() {
+            const storedUser = readStoredUser();
+            const pill = document.getElementById('session-pill');
+            if (storedUser && storedUser.email) {
+                pill.textContent = storedUser.email;
+                return;
+            }
+            pill.textContent = 'Interactive';
+        }
+
+        function unlockApp(email) {
+            document.getElementById('auth-layer').classList.add('hidden');
+            document.getElementById('user-input').focus();
+            document.getElementById('session-pill').textContent = email;
+        }
+
+        function switchAuthMode(mode) {
+            authMode = mode;
+            const createTab = document.getElementById('create-tab');
+            const loginTab = document.getElementById('login-tab');
+            const submit = document.getElementById('auth-submit');
+            const generate = document.getElementById('auth-generate');
+            const passwordField = document.getElementById('auth-password');
+            const hint = document.getElementById('auth-hint');
+
+            createTab.classList.toggle('active', mode === 'create');
+            loginTab.classList.toggle('active', mode === 'login');
+            submit.textContent = mode === 'create' ? 'Create Access' : 'Sign In';
+            generate.style.display = mode === 'create' ? 'inline-flex' : 'none';
+            passwordField.type = mode === 'login' ? 'password' : 'text';
+            passwordField.placeholder =
+                mode === 'create'
+                    ? 'Generate a password or type your own'
+                    : 'Enter your saved password';
+            hint.textContent =
+                mode === 'create'
+                    ? 'Use Create Access first for a new email. Sign In is for returning users on this browser.'
+                    : 'Use the same email and password you created earlier on this browser.';
+            setAuthMessage();
+            setGeneratedPassword();
+        }
+
+        function initializeAuth() {
+            const storedUser = readStoredUser();
+            const activeSession = sessionStorage.getItem(AUTH_SESSION_KEY);
+            updateSessionPill();
+
+            if (storedUser && activeSession && storedUser.email === activeSession) {
+                unlockApp(storedUser.email);
+            }
+
+            document.getElementById('create-tab').addEventListener('click', () => switchAuthMode('create'));
+            document.getElementById('login-tab').addEventListener('click', () => switchAuthMode('login'));
+            document.getElementById('auth-generate').addEventListener('click', () => {
+                const generated = createPassword();
+                document.getElementById('auth-password').value = generated;
+                setGeneratedPassword(generated);
+                setAuthMessage();
+            });
+
+            document.getElementById('auth-form').addEventListener('submit', (event) => {
+                event.preventDefault();
+                const emailField = document.getElementById('auth-email');
+                const passwordField = document.getElementById('auth-password');
+                const email = emailField.value.trim().toLowerCase();
+                const password = passwordField.value.trim();
+                const stored = readStoredUser();
+
+                if (!email) {
+                    setAuthMessage('Enter a valid email address to continue.', true);
+                    return;
+                }
+
+                if (!password) {
+                    setAuthMessage('Create or enter a password before continuing.', true);
+                    return;
+                }
+
+                if (authMode === 'create') {
+                    if (stored && stored.email === email) {
+                        setAuthMessage('This email already has access on this browser. Switch to Sign In instead.', true);
+                        return;
+                    }
+
+                    saveStoredUser({ email, password });
+                    setSession(email);
+                    setAuthMessage();
+                    unlockApp(email);
+                    return;
+                }
+
+                if (!stored) {
+                    setAuthMessage('No saved account exists on this browser yet. Use Create Access first.', true);
+                    return;
+                }
+
+                if (stored.email !== email || stored.password !== password) {
+                    setAuthMessage('Email or password did not match the saved browser access.', true);
+                    return;
+                }
+
+                setSession(email);
+                setAuthMessage();
+                unlockApp(email);
+            });
+
+            document.getElementById('signout-button').addEventListener('click', () => {
+                clearSession();
+                document.getElementById('auth-layer').classList.remove('hidden');
+                document.getElementById('auth-form').reset();
+                switchAuthMode('login');
+                updateSessionPill();
+            });
+
+            switchAuthMode(storedUser ? 'login' : 'create');
+        }
 
         function lerp(current, target, amount) {
             return current + (target - current) * amount;
@@ -841,6 +1321,7 @@
             renderer.setSize(window.innerWidth, window.innerHeight);
         });
 
+        initializeAuth();
         updateSceneStatus();
         animate();
     </script>
