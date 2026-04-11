@@ -653,7 +653,7 @@
                 <div>
                     <div class="eyebrow">Private Access</div>
                     <h1 class="auth-title">Sign in to your Nexus Learn workspace.</h1>
-                    <p class="auth-subtitle">Enter your email, generate a personal password, and unlock the live tutor, image panel, and 3D scene. This first version stores credentials locally in your browser for demo use.</p>
+                    <p class="auth-subtitle">Create a real account with your email and password, then unlock the live tutor, image panel, and 3D scene through a secure server session.</p>
                 </div>
                 <div class="auth-grid">
                     <div class="auth-metric">
@@ -666,23 +666,23 @@
                     </div>
                     <div class="auth-metric">
                         <strong>Session</strong>
-                        <span>Your sign-in stays active on this browser until you sign out.</span>
+                        <span>Your sign-in stays active with a server-backed session until you sign out.</span>
                     </div>
                     <div class="auth-metric">
-                        <strong>Demo</strong>
-                        <span>No database or email delivery required for this version.</span>
+                        <strong>Secure</strong>
+                        <span>Passwords are hashed on the server before they are stored.</span>
                     </div>
                 </div>
                 <div class="auth-highlight">
                     <strong>How It Works</strong>
-                    Create access with your email, copy the generated password, and then use the sign-in tab whenever you come back to this device.
+                    Create an account with your email, keep the generated password safe, and then sign in from the same app with a protected session cookie.
                 </div>
             </section>
 
             <section class="auth-card">
                 <div class="auth-card-head">
                     <h2>Access Portal</h2>
-                    <p>Create a password for a new email or sign in with an existing one.</p>
+                    <p>Create an account for a new email or sign in with an existing one.</p>
                 </div>
                 <div class="auth-toggle">
                     <button class="auth-tab active" id="create-tab" type="button">Create Access</button>
@@ -779,9 +779,8 @@
     </div>
 
     <script>
-        const AUTH_STORAGE_KEY = 'nexuslearn-user';
-        const AUTH_SESSION_KEY = 'nexuslearn-session';
         let authMode = 'create';
+        let activeUser = null;
 
         const THEME_PRESETS = {
             generic: { backgroundTop: '#05121a', backgroundBottom: '#01040a' },
@@ -910,40 +909,20 @@
             box.innerHTML = `Save this password now. You will need it to sign in later.<br><code>${password}</code>`;
         }
 
-        function readStoredUser() {
-            try {
-                return JSON.parse(localStorage.getItem(AUTH_STORAGE_KEY) || 'null');
-            } catch (error) {
-                return null;
-            }
-        }
-
-        function saveStoredUser(user) {
-            localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(user));
-        }
-
-        function setSession(email) {
-            sessionStorage.setItem(AUTH_SESSION_KEY, email);
-        }
-
-        function clearSession() {
-            sessionStorage.removeItem(AUTH_SESSION_KEY);
-        }
-
         function updateSessionPill() {
-            const storedUser = readStoredUser();
             const pill = document.getElementById('session-pill');
-            if (storedUser && storedUser.email) {
-                pill.textContent = storedUser.email;
+            if (activeUser && activeUser.email) {
+                pill.textContent = activeUser.email;
                 return;
             }
             pill.textContent = 'Interactive';
         }
 
-        function unlockApp(email) {
+        function unlockApp(user) {
+            activeUser = user;
             document.getElementById('auth-layer').classList.add('hidden');
             document.getElementById('user-input').focus();
-            document.getElementById('session-pill').textContent = email;
+            document.getElementById('session-pill').textContent = user.email;
         }
 
         function switchAuthMode(mode) {
@@ -966,19 +945,29 @@
                     : 'Enter your saved password';
             hint.textContent =
                 mode === 'create'
-                    ? 'Use Create Access first for a new email. Sign In is for returning users on this browser.'
-                    : 'Use the same email and password you created earlier on this browser.';
+                    ? 'Create a new account with your email, then save the generated password somewhere safe.'
+                    : 'Use the same email and password you created for this account.';
             setAuthMessage();
             setGeneratedPassword();
         }
 
-        function initializeAuth() {
-            const storedUser = readStoredUser();
-            const activeSession = sessionStorage.getItem(AUTH_SESSION_KEY);
+        async function fetchSession() {
+            const response = await fetch('/api/auth/session', {
+                credentials: 'same-origin'
+            });
+            return response.json();
+        }
+
+        async function initializeAuth() {
             updateSessionPill();
 
-            if (storedUser && activeSession && storedUser.email === activeSession) {
-                unlockApp(storedUser.email);
+            try {
+                const session = await fetchSession();
+                if (session.authenticated && session.user) {
+                    unlockApp(session.user);
+                }
+            } catch (error) {
+                setAuthMessage('Could not verify your session yet. You can still sign in manually.', true);
             }
 
             document.getElementById('create-tab').addEventListener('click', () => switchAuthMode('create'));
@@ -996,7 +985,7 @@
                 const passwordField = document.getElementById('auth-password');
                 const email = emailField.value.trim().toLowerCase();
                 const password = passwordField.value.trim();
-                const stored = readStoredUser();
+                const endpoint = authMode === 'create' ? '/api/auth/register' : '/api/auth/login';
 
                 if (!email) {
                     setAuthMessage('Enter a valid email address to continue.', true);
@@ -1008,43 +997,41 @@
                     return;
                 }
 
-                if (authMode === 'create') {
-                    if (stored && stored.email === email) {
-                        setAuthMessage('This email already has access on this browser. Switch to Sign In instead.', true);
-                        return;
-                    }
+                fetch(endpoint, {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, password })
+                })
+                    .then(async (response) => {
+                        const payload = await response.json();
 
-                    saveStoredUser({ email, password });
-                    setSession(email);
-                    setAuthMessage();
-                    unlockApp(email);
-                    return;
-                }
+                        if (!response.ok) {
+                            throw new Error(payload.error || 'Authentication failed.');
+                        }
 
-                if (!stored) {
-                    setAuthMessage('No saved account exists on this browser yet. Use Create Access first.', true);
-                    return;
-                }
-
-                if (stored.email !== email || stored.password !== password) {
-                    setAuthMessage('Email or password did not match the saved browser access.', true);
-                    return;
-                }
-
-                setSession(email);
-                setAuthMessage();
-                unlockApp(email);
+                        setAuthMessage();
+                        unlockApp(payload.user);
+                    })
+                    .catch((error) => {
+                        setAuthMessage(error.message || 'Authentication failed.', true);
+                    });
             });
 
             document.getElementById('signout-button').addEventListener('click', () => {
-                clearSession();
+                fetch('/api/auth/logout', {
+                    method: 'POST',
+                    credentials: 'same-origin'
+                }).catch(() => null);
+
+                activeUser = null;
                 document.getElementById('auth-layer').classList.remove('hidden');
                 document.getElementById('auth-form').reset();
                 switchAuthMode('login');
                 updateSessionPill();
             });
 
-            switchAuthMode(storedUser ? 'login' : 'create');
+            switchAuthMode('create');
         }
 
         function lerp(current, target, amount) {
@@ -1252,6 +1239,12 @@
                 loadingMessage.remove();
 
                 if (!response.ok) {
+                    if (response.status === 401) {
+                        activeUser = null;
+                        document.getElementById('auth-layer').classList.remove('hidden');
+                        switchAuthMode('login');
+                        updateSessionPill();
+                    }
                     throw new Error(payload.error || 'The tutor endpoint failed to respond.');
                 }
 

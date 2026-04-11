@@ -5,6 +5,7 @@
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 
 const OPENAI_API_URL = 'https://api.openai.com/v1/responses';
 const baseDir = path.resolve(__dirname);
@@ -17,6 +18,10 @@ const DEFAULT_GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
 const DEFAULT_GEMINI_IMAGE_MODEL = process.env.GEMINI_IMAGE_MODEL || 'gemini-2.5-flash-image';
 const GOOGLE_SEARCH_API_URL = 'https://customsearch.googleapis.com/customsearch/v1';
 const DEFAULT_HF_IMAGE_MODEL = process.env.HF_IMAGE_MODEL || 'black-forest-labs/FLUX.1-schnell';
+const USERS_FILE = path.join(baseDir, 'users.json');
+const SESSION_COOKIE = 'nexuslearn_session';
+const AUTH_SECRET =
+  process.env.AUTH_SECRET || process.env.GEMINI_API_KEY || process.env.OPENAI_API_KEY || 'nexuslearn-dev-secret';
 
 const mimeTypes = {
   '.html': 'text/html; charset=utf-8',
@@ -73,6 +78,101 @@ function sendJson(res, statusCode, payload) {
     'Cache-Control': 'no-store'
   });
   res.end(JSON.stringify(payload));
+}
+
+function parseCookies(req) {
+  const cookieHeader = req.headers.cookie || '';
+  return cookieHeader.split(';').reduce((cookies, item) => {
+    const [rawKey, ...rawValue] = item.trim().split('=');
+    if (!rawKey) {
+      return cookies;
+    }
+    cookies[rawKey] = decodeURIComponent(rawValue.join('='));
+    return cookies;
+  }, {});
+}
+
+function createSessionToken(email) {
+  const payload = Buffer.from(
+    JSON.stringify({
+      email,
+      issuedAt: Date.now()
+    })
+  ).toString('base64url');
+  const signature = crypto.createHmac('sha256', AUTH_SECRET).update(payload).digest('base64url');
+  return `${payload}.${signature}`;
+}
+
+function verifySessionToken(token) {
+  if (!token || !token.includes('.')) {
+    return null;
+  }
+
+  const [payload, signature] = token.split('.');
+  const expectedSignature = crypto.createHmac('sha256', AUTH_SECRET).update(payload).digest('base64url');
+
+  if (signature !== expectedSignature) {
+    return null;
+  }
+
+  try {
+    const session = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
+    return session && typeof session.email === 'string' ? session : null;
+  } catch (error) {
+    return null;
+  }
+}
+
+function setSessionCookie(res, email) {
+  const secure = process.env.NODE_ENV === 'production' ? 'Secure; ' : '';
+  res.setHeader('Set-Cookie', `${SESSION_COOKIE}=${createSessionToken(email)}; Path=/; HttpOnly; ${secure}SameSite=Lax; Max-Age=2592000`);
+}
+
+function clearSessionCookie(res) {
+  const secure = process.env.NODE_ENV === 'production' ? 'Secure; ' : '';
+  res.setHeader('Set-Cookie', `${SESSION_COOKIE}=; Path=/; HttpOnly; ${secure}SameSite=Lax; Max-Age=0`);
+}
+
+function getUsers() {
+  if (!fs.existsSync(USERS_FILE)) {
+    return [];
+  }
+
+  try {
+    const parsed = JSON.parse(fs.readFileSync(USERS_FILE, 'utf8'));
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (error) {
+    return [];
+  }
+}
+
+function saveUsers(users) {
+  fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2));
+}
+
+function hashPassword(password, salt = crypto.randomBytes(16).toString('hex')) {
+  const hash = crypto.pbkdf2Sync(password, salt, 120000, 64, 'sha512').toString('hex');
+  return { salt, hash };
+}
+
+function validatePassword(password, user) {
+  if (!user || !user.salt || !user.passwordHash) {
+    return false;
+  }
+
+  const hash = crypto.pbkdf2Sync(password, user.salt, 120000, 64, 'sha512').toString('hex');
+  return crypto.timingSafeEqual(Buffer.from(hash, 'hex'), Buffer.from(user.passwordHash, 'hex'));
+}
+
+function getAuthenticatedUser(req) {
+  const cookies = parseCookies(req);
+  const session = verifySessionToken(cookies[SESSION_COOKIE]);
+  if (!session) {
+    return null;
+  }
+
+  const users = getUsers();
+  return users.find((user) => user.email === session.email) || null;
 }
 
 function normalizeAnimationPayload(raw) {
@@ -168,6 +268,13 @@ async function readJsonBody(req) {
   } catch (error) {
     throw new Error('Invalid JSON body.');
   }
+}
+
+function sanitizeUser(user) {
+  return {
+    email: user.email,
+    createdAt: user.createdAt
+  };
 }
 
 async function fetchTutorResponse(question) {
@@ -569,6 +676,12 @@ function serveStatic(req, res) {
 
 async function handleApiChat(req, res) {
   try {
+    const authenticatedUser = getAuthenticatedUser(req);
+    if (!authenticatedUser) {
+      sendJson(res, 401, { error: 'Please sign in to continue.' });
+      return;
+    }
+
     const body = await readJsonBody(req);
     const question = typeof body.question === 'string' ? body.question.trim() : '';
 
@@ -584,6 +697,82 @@ async function handleApiChat(req, res) {
   }
 }
 
+async function handleRegister(req, res) {
+  try {
+    const body = await readJsonBody(req);
+    const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : '';
+    const password = typeof body.password === 'string' ? body.password.trim() : '';
+
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      sendJson(res, 400, { error: 'Enter a valid email address.' });
+      return;
+    }
+
+    if (password.length < 8) {
+      sendJson(res, 400, { error: 'Password must be at least 8 characters long.' });
+      return;
+    }
+
+    const users = getUsers();
+    if (users.some((user) => user.email === email)) {
+      sendJson(res, 409, { error: 'An account with this email already exists.' });
+      return;
+    }
+
+    const passwordRecord = hashPassword(password);
+    const newUser = {
+      email,
+      salt: passwordRecord.salt,
+      passwordHash: passwordRecord.hash,
+      createdAt: new Date().toISOString()
+    };
+
+    users.push(newUser);
+    saveUsers(users);
+    setSessionCookie(res, email);
+    sendJson(res, 201, { user: sanitizeUser(newUser) });
+  } catch (error) {
+    sendJson(res, 500, { error: error.message || 'Could not create account.' });
+  }
+}
+
+async function handleLogin(req, res) {
+  try {
+    const body = await readJsonBody(req);
+    const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : '';
+    const password = typeof body.password === 'string' ? body.password.trim() : '';
+    const user = getUsers().find((entry) => entry.email === email);
+
+    if (!user || !validatePassword(password, user)) {
+      sendJson(res, 401, { error: 'Incorrect email or password.' });
+      return;
+    }
+
+    setSessionCookie(res, email);
+    sendJson(res, 200, { user: sanitizeUser(user) });
+  } catch (error) {
+    sendJson(res, 500, { error: error.message || 'Could not sign in.' });
+  }
+}
+
+function handleLogout(res) {
+  clearSessionCookie(res);
+  sendJson(res, 200, { ok: true });
+}
+
+function handleSession(req, res) {
+  const user = getAuthenticatedUser(req);
+  if (!user) {
+    sendJson(res, 200, { authenticated: false });
+    return;
+  }
+
+  sendJson(res, 200, {
+    authenticated: true,
+    user: sanitizeUser(user)
+  });
+}
+
 function createServer() {
   return http.createServer((req, res) => {
     if (!req.url) {
@@ -591,8 +780,30 @@ function createServer() {
       return;
     }
 
-    if (req.method === 'POST' && req.url.split('?')[0] === '/api/chat') {
+    const requestPath = req.url.split('?')[0];
+
+    if (req.method === 'POST' && requestPath === '/api/chat') {
       handleApiChat(req, res);
+      return;
+    }
+
+    if (req.method === 'POST' && requestPath === '/api/auth/register') {
+      handleRegister(req, res);
+      return;
+    }
+
+    if (req.method === 'POST' && requestPath === '/api/auth/login') {
+      handleLogin(req, res);
+      return;
+    }
+
+    if (req.method === 'POST' && requestPath === '/api/auth/logout') {
+      handleLogout(res);
+      return;
+    }
+
+    if (req.method === 'GET' && requestPath === '/api/auth/session') {
+      handleSession(req, res);
       return;
     }
 
