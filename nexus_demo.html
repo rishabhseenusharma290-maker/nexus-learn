@@ -45,6 +45,48 @@
             z-index: 1;
         }
 
+        #image-backdrop {
+            position: fixed;
+            inset: 0;
+            z-index: 0;
+            overflow: hidden;
+            pointer-events: none;
+        }
+
+        #backdrop-image {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            opacity: 0;
+            filter: saturate(1.15) contrast(1.05) blur(10px);
+            transform: scale(1.08);
+            transition: opacity 0.5s ease, transform 1.4s ease;
+        }
+
+        #backdrop-image.visible {
+            opacity: 0.36;
+            transform: scale(1.02);
+        }
+
+        .backdrop-scrim {
+            position: absolute;
+            inset: 0;
+            background:
+                radial-gradient(circle at 38% 42%, rgba(111, 255, 209, 0.16), transparent 20%),
+                radial-gradient(circle at 65% 34%, rgba(149, 92, 255, 0.18), transparent 24%),
+                linear-gradient(90deg, rgba(2, 6, 14, 0.84) 0%, rgba(3, 7, 18, 0.62) 38%, rgba(2, 6, 14, 0.78) 100%);
+        }
+
+        .backdrop-grid {
+            position: absolute;
+            inset: 0;
+            background-image:
+                linear-gradient(rgba(121, 255, 225, 0.05) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(121, 255, 225, 0.05) 1px, transparent 1px);
+            background-size: 72px 72px;
+            mask-image: radial-gradient(circle at center, rgba(0, 0, 0, 0.7), transparent 72%);
+        }
+
         #auth-layer {
             position: fixed;
             inset: 0;
@@ -288,16 +330,16 @@
             position: fixed;
             inset: 0;
             z-index: 2;
-            display: flex;
-            justify-content: space-between;
-            align-items: stretch;
-            gap: 20px;
+            display: grid;
+            grid-template-rows: auto minmax(0, 1fr);
+            gap: 18px;
             padding: 22px;
             pointer-events: none;
         }
 
-        .hero,
-        .panel {
+        .topbar,
+        .stage-panel,
+        .chat-panel {
             pointer-events: auto;
             background: var(--panel);
             border: 1px solid var(--border);
@@ -305,14 +347,190 @@
             box-shadow: var(--shadow);
         }
 
-        .hero {
-            align-self: flex-start;
-            max-width: 380px;
-            padding: 22px 22px 18px;
-            border-radius: 28px;
+        .topbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 18px;
+            padding: 16px 18px;
+            border-radius: 24px;
+            background: linear-gradient(180deg, rgba(9, 20, 36, 0.82), rgba(4, 11, 20, 0.86));
+        }
+
+        .brand-block {
             display: flex;
             flex-direction: column;
+            gap: 6px;
+        }
+
+        .brand-row {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            flex-wrap: wrap;
+        }
+
+        .brand-title {
+            margin: 0;
+            font-family: "Space Grotesk", sans-serif;
+            font-size: clamp(1.8rem, 3vw, 2.5rem);
+            line-height: 0.95;
+            letter-spacing: -0.04em;
+        }
+
+        .brand-copy {
+            margin: 0;
+            max-width: 760px;
+            color: var(--muted);
+            line-height: 1.5;
+        }
+
+        .topbar-right {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+            justify-content: flex-end;
+        }
+
+        .layout-shell {
+            min-height: 0;
+            display: grid;
+            grid-template-columns: minmax(360px, 1.05fr) minmax(440px, 1.25fr);
             gap: 18px;
+            align-items: stretch;
+        }
+
+        .stage-panel {
+            position: relative;
+            overflow: hidden;
+            padding: 24px;
+            border-radius: 34px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            gap: 18px;
+            min-height: 0;
+            background:
+                linear-gradient(180deg, rgba(7, 17, 31, 0.74), rgba(5, 13, 25, 0.78)),
+                radial-gradient(circle at top left, rgba(121, 255, 225, 0.16), transparent 28%);
+        }
+
+        .stage-panel::before {
+            content: "";
+            position: absolute;
+            inset: auto -12% -28% 18%;
+            height: 42%;
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(121, 255, 225, 0.2), transparent 70%);
+            filter: blur(22px);
+            opacity: 0.7;
+        }
+
+        .stage-head,
+        .stage-footer {
+            position: relative;
+            z-index: 1;
+        }
+
+        .stage-head {
+            display: flex;
+            justify-content: space-between;
+            gap: 14px;
+            align-items: flex-start;
+        }
+
+        .stage-copy {
+            max-width: 540px;
+        }
+
+        .stage-copy h1 {
+            margin: 10px 0 10px;
+        }
+
+        .stage-copy p {
+            margin: 0;
+            color: var(--muted);
+            line-height: 1.6;
+            max-width: 540px;
+        }
+
+        .stage-meta {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            min-width: 160px;
+            align-items: flex-end;
+        }
+
+        .stage-surface {
+            position: relative;
+            min-height: 340px;
+            flex: 1;
+            border-radius: 30px;
+            border: 1px solid rgba(111, 255, 209, 0.14);
+            background:
+                linear-gradient(180deg, rgba(5, 13, 25, 0.2), rgba(5, 13, 25, 0.64)),
+                radial-gradient(circle at center, rgba(121, 255, 225, 0.16), transparent 42%);
+            overflow: hidden;
+        }
+
+        .stage-surface::before {
+            content: "";
+            position: absolute;
+            inset: 14% 12% 18% 10%;
+            border-radius: 26px;
+            border: 1px solid rgba(121, 255, 225, 0.1);
+            background: linear-gradient(135deg, rgba(255, 255, 255, 0.04), rgba(121, 255, 225, 0.02));
+        }
+
+        .stage-surface::after {
+            content: "";
+            position: absolute;
+            left: 8%;
+            right: 8%;
+            bottom: 12%;
+            height: 18%;
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(121, 255, 225, 0.16), transparent 68%);
+            filter: blur(18px);
+        }
+
+        .concept-badge {
+            position: absolute;
+            left: 24px;
+            top: 22px;
+            z-index: 2;
+            padding: 8px 12px;
+            border-radius: 999px;
+            background: rgba(5, 13, 25, 0.58);
+            border: 1px solid rgba(121, 255, 225, 0.14);
+            color: var(--accent);
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.16em;
+        }
+
+        .concept-note {
+            position: absolute;
+            left: 24px;
+            bottom: 22px;
+            z-index: 2;
+            max-width: 280px;
+            padding: 14px 16px;
+            border-radius: 18px;
+            background: rgba(5, 13, 25, 0.56);
+            border: 1px solid rgba(121, 255, 225, 0.14);
+            color: var(--muted);
+            font-size: 13px;
+            line-height: 1.5;
+        }
+
+        .stage-footer {
+            display: grid;
+            grid-template-columns: 1fr auto;
+            gap: 16px;
+            align-items: end;
         }
 
         .eyebrow {
@@ -330,7 +548,7 @@
             letter-spacing: -0.04em;
         }
 
-        .hero p,
+        .stage-copy p,
         #scene-status {
             margin: 0;
             color: var(--muted);
@@ -394,24 +612,16 @@
             background: rgba(121, 255, 225, 0.08);
         }
 
-        .panel {
+        .chat-panel {
             margin-left: auto;
-            align-self: flex-end;
-            width: min(460px, 100%);
-            border-radius: 28px;
-            padding: 18px;
+            min-width: 0;
+            border-radius: 34px;
+            padding: 22px;
             display: flex;
             flex-direction: column;
-            gap: 12px;
+            gap: 14px;
+            min-height: 0;
             background: linear-gradient(180deg, rgba(7, 17, 31, 0.86), rgba(5, 13, 25, 0.92));
-        }
-
-        .media-panel {
-            width: min(360px, 100%);
-            align-self: stretch;
-            justify-content: space-between;
-            border-radius: 28px;
-            padding: 16px;
         }
 
         .section-head {
@@ -454,6 +664,15 @@
                 radial-gradient(circle at top, rgba(111, 255, 209, 0.18), transparent 40%),
                 rgba(0, 0, 0, 0.28);
             aspect-ratio: 16 / 9;
+        }
+
+        .topic-preview {
+            width: min(320px, 100%);
+            padding: 14px;
+            border-radius: 24px;
+            background: rgba(4, 11, 20, 0.58);
+            border: 1px solid rgba(121, 255, 225, 0.12);
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
         }
 
         #topic-image {
@@ -505,7 +724,8 @@
         }
 
         #chat-box {
-            height: min(42vh, 360px);
+            flex: 1;
+            min-height: 320px;
             overflow-y: auto;
             padding-right: 6px;
         }
@@ -623,13 +843,16 @@
             #ui-layer {
                 position: relative;
                 min-height: 100vh;
-                flex-direction: column;
-                justify-content: flex-start;
+                grid-template-rows: auto auto;
             }
 
-            .hero,
-            .panel,
-            .media-panel {
+            .layout-shell {
+                grid-template-columns: 1fr;
+            }
+
+            .topbar,
+            .stage-panel,
+            .chat-panel {
                 width: 100%;
                 max-width: none;
             }
@@ -638,14 +861,31 @@
                 grid-template-columns: 1fr;
             }
 
-            .panel {
+            .stage-head,
+            .stage-footer,
+            .topbar {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .stage-meta,
+            .topbar-right {
+                align-items: flex-start;
+                justify-content: flex-start;
+            }
+
+            .chat-panel {
                 margin-left: 0;
-                margin-top: auto;
             }
         }
     </style>
 </head>
 <body>
+    <div id="image-backdrop" aria-hidden="true">
+        <img id="backdrop-image" alt="">
+        <div class="backdrop-scrim"></div>
+        <div class="backdrop-grid"></div>
+    </div>
     <div id="canvas-container"></div>
     <div id="auth-layer">
         <div class="auth-shell">
@@ -710,72 +950,86 @@
     </div>
 
     <div id="ui-layer">
-        <section class="hero">
-            <div class="hero-copy">
+        <header class="topbar">
+            <div class="brand-block">
                 <div class="eyebrow">Live AI Tutor</div>
-                <h1>Nexus Learn</h1>
-                <p>Ask a real question about science, space, math, history, or biology. The tutor answers through the API while the scene morphs to match the concept.</p>
-            </div>
-            <div class="hero-stats">
-                <div class="stat-card">
-                    <span class="stat-value">Live</span>
-                    <span class="stat-label">AI answers</span>
+                <div class="brand-row">
+                    <h2 class="brand-title">Nexus Learn</h2>
+                    <span class="section-pill" id="topic-image-source">Waiting</span>
                 </div>
-                <div class="stat-card">
-                    <span class="stat-value">3D</span>
-                    <span class="stat-label">Reactive scene</span>
-                </div>
-                <div class="stat-card">
-                    <span class="stat-value">Visual</span>
-                    <span class="stat-label">Topic image</span>
-                </div>
+                <p class="brand-copy">Ask a real question and the image becomes the atmosphere, while the left-side concept stage builds a fast 2.5D interpretation around the same topic.</p>
             </div>
-            <div class="prompt-strip" aria-label="Quick prompts">
-                <button class="prompt-chip" type="button" data-prompt="Explain how black holes bend light.">Black holes</button>
-                <button class="prompt-chip" type="button" data-prompt="Teach me the structure of an atom in simple words.">Atoms</button>
-                <button class="prompt-chip" type="button" data-prompt="What is the Milky Way and where is our solar system inside it?">Milky Way</button>
-                <button class="prompt-chip" type="button" data-prompt="Help me understand photosynthesis with a visual explanation.">Photosynthesis</button>
+            <div class="topbar-right">
+                <span class="section-pill" id="session-pill">Interactive</span>
+                <button class="secondary-button" id="signout-button" type="button">Sign Out</button>
             </div>
-            <p class="tiny-note">Tip: pick a prompt or type your own topic below to update the scene and image.</p>
-        </section>
+        </header>
 
-        <section class="panel media-panel">
-            <div class="section-head">
-                <h2>Topic Image</h2>
-                <span class="section-pill" id="topic-image-source">Waiting</span>
-            </div>
-            <div id="topic-image-frame">
-                <img id="topic-image" alt="AI generated topic illustration">
-                <div id="topic-image-placeholder">Ask a question to generate a live educational image for the topic.</div>
-            </div>
-            <div class="caption-row">
-                <p id="topic-image-caption">The generated image will appear here and update with each topic.</p>
-            </div>
-        </section>
+        <div class="layout-shell">
+            <section class="stage-panel">
+                <div class="stage-head">
+                    <div class="stage-copy">
+                        <div class="eyebrow">Concept Stage</div>
+                        <h1>Image-driven depth scene.</h1>
+                        <p>The generated topic visual becomes a layered backdrop while the 3D scene builds a floating fast-response depth sculpture around it.</p>
+                    </div>
+                    <div class="stage-meta hero-stats">
+                        <div class="stat-card">
+                            <span class="stat-value">Live</span>
+                            <span class="stat-label">AI answers</span>
+                        </div>
+                        <div class="stat-card">
+                            <span class="stat-value">2.5D</span>
+                            <span class="stat-label">Image depth stage</span>
+                        </div>
+                        <div class="stat-card">
+                            <span class="stat-value">3D</span>
+                            <span class="stat-label">Reactive scene</span>
+                        </div>
+                    </div>
+                </div>
 
-        <section class="panel">
-            <div class="panel-top">
-                <div class="panel-title">
-                    <strong>Conversation</strong>
-                    <span class="tiny-note">Ask anything and the scene will adapt in real time.</span>
+                <div class="stage-surface">
+                    <div class="concept-badge">Generated image depth model</div>
+                    <div class="concept-note" id="topic-image-caption">Ask a question to generate a live educational image and turn it into the stage atmosphere.</div>
                 </div>
-                <div class="control-row">
-                    <span class="section-pill" id="session-pill">Interactive</span>
-                    <button class="secondary-button" id="signout-button" type="button">Sign Out</button>
+
+                <div class="stage-footer">
+                    <div class="prompt-strip" aria-label="Quick prompts">
+                        <button class="prompt-chip" type="button" data-prompt="Explain how black holes bend light.">Black holes</button>
+                        <button class="prompt-chip" type="button" data-prompt="Teach me the structure of an atom in simple words.">Atoms</button>
+                        <button class="prompt-chip" type="button" data-prompt="What is the Milky Way and where is our solar system inside it?">Milky Way</button>
+                        <button class="prompt-chip" type="button" data-prompt="Help me understand photosynthesis with a visual explanation.">Photosynthesis</button>
+                    </div>
+                    <div class="topic-preview">
+                        <div id="topic-image-frame">
+                            <img id="topic-image" alt="AI generated topic illustration">
+                            <div id="topic-image-placeholder">Ask a question to generate a live educational image for the topic.</div>
+                        </div>
+                    </div>
                 </div>
-            </div>
-            <div id="chat-box">
-                <div class="msg ai">
-                    <span class="meta">Nexus</span>
-                    Hello! I am connected to a live tutor endpoint now. Ask me about atoms, black holes, calculus, cells, or history.
+            </section>
+
+            <section class="chat-panel">
+                <div class="panel-top">
+                    <div class="panel-title">
+                        <strong>Conversation</strong>
+                        <span class="tiny-note">Ask anything and the scene will adapt in real time.</span>
+                    </div>
                 </div>
-            </div>
-            <div id="scene-status">Scene ready: generic pulse.</div>
-            <div id="input-area">
-                <input type="text" id="user-input" placeholder="Ask a question and watch the scene react..." autocomplete="off">
-                <button id="ask-button" type="button">Ask Nexus</button>
-            </div>
-        </section>
+                <div id="chat-box">
+                    <div class="msg ai">
+                        <span class="meta">Nexus</span>
+                        Hello! I am connected to a live tutor endpoint now. Ask me about atoms, black holes, calculus, cells, or history.
+                    </div>
+                </div>
+                <div id="scene-status">Scene ready: generic pulse.</div>
+                <div id="input-area">
+                    <input type="text" id="user-input" placeholder="Ask a question and watch the scene react..." autocomplete="off">
+                    <button id="ask-button" type="button">Ask Nexus</button>
+                </div>
+            </section>
+        </div>
     </div>
 
     <script>
@@ -798,9 +1052,15 @@
         renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
         renderer.setSize(window.innerWidth, window.innerHeight);
         document.getElementById('canvas-container').appendChild(renderer.domElement);
+        const textureLoader = new THREE.TextureLoader();
 
         const centerGroup = new THREE.Group();
         scene.add(centerGroup);
+
+        const imageStage = new THREE.Group();
+        imageStage.position.set(-2.4, 0.1, -1.8);
+        imageStage.rotation.y = 0.28;
+        scene.add(imageStage);
 
         const geometries = {
             icosahedron: new THREE.IcosahedronGeometry(1.6, 0),
@@ -829,6 +1089,31 @@
         const shell = new THREE.Mesh(geometries.icosahedron.clone(), shellMaterial);
         shell.scale.setScalar(1.22);
         centerGroup.add(shell);
+
+        const imagePlaneGeometry = new THREE.PlaneGeometry(3.1, 1.92, 1, 1);
+        const imagePlaneMaterials = [0, 1, 2].map((index) => {
+            const opacity = index === 0 ? 0.96 : index === 1 ? 0.32 : 0.18;
+            return new THREE.MeshBasicMaterial({
+                color: new THREE.Color('hsl(170, 100%, 65%)'),
+                transparent: true,
+                opacity,
+                side: THREE.DoubleSide,
+                blending: index === 0 ? THREE.NormalBlending : THREE.AdditiveBlending
+            });
+        });
+        const imagePlanes = imagePlaneMaterials.map((material, index) => {
+            const plane = new THREE.Mesh(imagePlaneGeometry, material);
+            plane.position.set(index * 0.16, index * 0.05, -index * 0.22);
+            imageStage.add(plane);
+            return plane;
+        });
+        const imageFrame = new THREE.LineSegments(
+            new THREE.EdgesGeometry(new THREE.PlaneGeometry(3.35, 2.1)),
+            new THREE.LineBasicMaterial({ color: new THREE.Color('hsl(170, 100%, 65%)'), transparent: true, opacity: 0.4 })
+        );
+        imageFrame.position.set(0.14, -0.02, -0.48);
+        imageStage.add(imageFrame);
+        imageStage.visible = false;
 
         const particlesGeometry = new THREE.BufferGeometry();
         const particleCount = 900;
@@ -883,6 +1168,7 @@
         const targetState = { ...currentState };
         const clock = new THREE.Clock();
         let orbitAngle = 0;
+        let activeImageTexture = null;
 
         function createPassword(length = 12) {
             const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%';
@@ -1054,6 +1340,53 @@
             currentState.shape = shapeName;
         }
 
+        function applyImageStageTexture(src) {
+            const backdrop = document.getElementById('backdrop-image');
+            if (!src) {
+                imageStage.visible = false;
+                backdrop.classList.remove('visible');
+                backdrop.removeAttribute('src');
+                imagePlaneMaterials.forEach((material, index) => {
+                    if (material.map) {
+                        material.map.dispose();
+                    }
+                    material.map = null;
+                    material.needsUpdate = true;
+                    material.opacity = index === 0 ? 0.96 : index === 1 ? 0.32 : 0.18;
+                });
+                if (activeImageTexture) {
+                    activeImageTexture.dispose();
+                    activeImageTexture = null;
+                }
+                return;
+            }
+
+            backdrop.src = src;
+            backdrop.classList.add('visible');
+
+            textureLoader.setCrossOrigin('anonymous');
+            textureLoader.load(
+                src,
+                (texture) => {
+                    if (activeImageTexture) {
+                        activeImageTexture.dispose();
+                    }
+                    activeImageTexture = texture;
+                    texture.colorSpace = THREE.SRGBColorSpace;
+                    imagePlaneMaterials.forEach((material, index) => {
+                        material.map = texture;
+                        material.needsUpdate = true;
+                        material.opacity = index === 0 ? 0.98 : index === 1 ? 0.28 : 0.14;
+                    });
+                    imageStage.visible = true;
+                },
+                undefined,
+                () => {
+                    imageStage.visible = false;
+                }
+            );
+        }
+
         function updateSceneStatus() {
             const themeLabel = targetState.theme[0].toUpperCase() + targetState.theme.slice(1);
             document.getElementById('scene-status').textContent = `Scene mode: ${themeLabel}, ${targetState.motion}, intensity ${targetState.intensity.toFixed(2)}.`;
@@ -1093,6 +1426,10 @@
             particlesMaterial.color.lerp(targetColor, 0.05);
             ringMaterial.color.lerp(targetColor, 0.05);
             pointLight.color.lerp(targetColor, 0.04);
+            imagePlaneMaterials.forEach((material) => {
+                material.color.lerp(targetColor, 0.04);
+            });
+            imageFrame.material.color.lerp(targetColor, 0.04);
 
             const pulse = 1 + Math.sin(elapsed * (1.2 + currentState.intensity * 2.4)) * (0.06 + currentState.intensity * 0.12);
             const wave = Math.sin(elapsed * 1.4) * 0.25;
@@ -1124,6 +1461,19 @@
             shell.scale.setScalar(1.18 + currentState.intensity * 0.15);
             ring.rotation.z += 0.004 + currentState.intensity * 0.008;
             ring.scale.setScalar(1 + currentState.intensity * 0.25);
+
+            imageStage.rotation.y = 0.22 + Math.sin(elapsed * 0.42) * 0.12;
+            imageStage.rotation.x = Math.cos(elapsed * 0.31) * 0.04;
+            imageStage.position.y = 0.18 + Math.sin(elapsed * 0.75) * 0.12;
+            imagePlanes[0].position.z = Math.sin(elapsed * 0.8) * 0.06;
+            imagePlanes[1].position.x = 0.16 + Math.cos(elapsed * 0.96) * 0.08;
+            imagePlanes[1].position.y = 0.05 + Math.sin(elapsed * 1.1) * 0.05;
+            imagePlanes[2].position.x = 0.32 + Math.sin(elapsed * 0.88) * 0.1;
+            imagePlanes[2].position.y = 0.1 + Math.cos(elapsed * 0.72) * 0.06;
+            imagePlanes.forEach((plane, index) => {
+                const scaleOffset = index * 0.045;
+                plane.scale.setScalar(1 + Math.sin(elapsed * (1 + index * 0.2)) * 0.018 + scaleOffset);
+            });
 
             const positions = particlesGeometry.attributes.position.array;
             for (let i = 0; i < particleCount; i += 1) {
@@ -1174,6 +1524,7 @@
             if (options.loading) {
                 image.classList.remove('visible');
                 image.removeAttribute('src');
+                applyImageStageTexture('');
                 placeholder.textContent = 'Generating a fresh topic image...';
                 caption.textContent = 'The image model is composing a new scene for this question.';
                 source.textContent = 'Loading';
@@ -1186,6 +1537,7 @@
                 image.referrerPolicy = 'no-referrer';
                 image.loading = 'eager';
                 image.classList.add('visible');
+                applyImageStageTexture(options.dataUrl);
                 placeholder.textContent = '';
                 caption.textContent = options.caption || 'Generated topic image';
                 source.textContent = options.source || 'AI';
@@ -1198,6 +1550,7 @@
                 image.referrerPolicy = 'no-referrer';
                 image.loading = 'eager';
                 image.classList.add('visible');
+                applyImageStageTexture(options.url);
                 placeholder.textContent = '';
                 caption.textContent = options.caption || 'Topic image';
                 source.textContent = options.source || 'Web';
@@ -1206,6 +1559,7 @@
 
             image.classList.remove('visible');
             image.removeAttribute('src');
+            applyImageStageTexture('');
             placeholder.textContent = options.placeholder || 'No topic image is available for this response.';
             caption.textContent = options.caption || 'Image generation is unavailable for this response.';
             source.textContent = options.source || 'Unavailable';
