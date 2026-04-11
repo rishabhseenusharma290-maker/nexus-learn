@@ -473,6 +473,12 @@
                 linear-gradient(180deg, rgba(5, 13, 25, 0.08), rgba(5, 13, 25, 0.46)),
                 radial-gradient(circle at center, rgba(121, 255, 225, 0.16), transparent 42%);
             overflow: hidden;
+            cursor: grab;
+            transform-style: preserve-3d;
+        }
+
+        .stage-surface:active {
+            cursor: grabbing;
         }
 
         .stage-surface::before {
@@ -517,6 +523,7 @@
             z-index: 1;
             perspective: 1200px;
             pointer-events: none;
+            transform-style: preserve-3d;
         }
 
         .depth-layer {
@@ -570,6 +577,24 @@
             background: radial-gradient(circle, rgba(121, 255, 225, 0.24), rgba(121, 255, 225, 0.04) 46%, transparent 70%);
             filter: blur(22px);
             opacity: 0.8;
+        }
+
+        .depth-glare {
+            position: absolute;
+            inset: 7% 10% 14% 12%;
+            z-index: 2;
+            border-radius: 28px;
+            background:
+                radial-gradient(circle at 35% 35%, rgba(255, 255, 255, 0.34), transparent 18%),
+                linear-gradient(125deg, rgba(255, 255, 255, 0.12), transparent 36%, rgba(255, 255, 255, 0.08) 54%, transparent 72%);
+            mix-blend-mode: screen;
+            opacity: 0.22;
+            pointer-events: none;
+            transition: opacity 0.3s ease;
+        }
+
+        .stage-surface:hover .depth-glare {
+            opacity: 0.36;
         }
 
         .concept-note {
@@ -1053,6 +1078,7 @@
                 <div class="stage-surface">
                     <div class="concept-badge">Generated image depth model</div>
                     <div class="depth-glow" aria-hidden="true"></div>
+                    <div class="depth-glare" id="depth-glare" aria-hidden="true"></div>
                     <div class="depth-stack" id="depth-stack" aria-hidden="true">
                         <div class="depth-layer depth-layer--back" id="depth-layer-back">
                             <img id="depth-image-back" alt="">
@@ -1242,6 +1268,13 @@
         const clock = new THREE.Clock();
         let orbitAngle = 0;
         let activeImageTexture = null;
+        const depthInteraction = {
+            targetX: 0,
+            targetY: 0,
+            currentX: 0,
+            currentY: 0,
+            active: false
+        };
 
         function createPassword(length = 12) {
             const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%';
@@ -1413,6 +1446,48 @@
             currentState.shape = shapeName;
         }
 
+        function initializeDepthInteraction() {
+            const stageSurface = document.querySelector('.stage-surface');
+            const glare = document.getElementById('depth-glare');
+
+            if (!stageSurface || !glare) {
+                return;
+            }
+
+            const updatePointer = (clientX, clientY) => {
+                const rect = stageSurface.getBoundingClientRect();
+                if (!rect.width || !rect.height) {
+                    return;
+                }
+
+                const normalizedX = ((clientX - rect.left) / rect.width) * 2 - 1;
+                const normalizedY = ((clientY - rect.top) / rect.height) * 2 - 1;
+
+                depthInteraction.targetX = Math.max(-1, Math.min(1, normalizedX));
+                depthInteraction.targetY = Math.max(-1, Math.min(1, normalizedY));
+                glare.style.background = `
+                    radial-gradient(circle at ${(normalizedX + 1) * 50}% ${(normalizedY + 1) * 50}%, rgba(255, 255, 255, 0.34), transparent 17%),
+                    linear-gradient(${125 + normalizedX * 12}deg, rgba(255, 255, 255, 0.14), transparent 34%, rgba(255, 255, 255, 0.08) 56%, transparent 72%)
+                `;
+            };
+
+            stageSurface.addEventListener('pointermove', (event) => {
+                depthInteraction.active = true;
+                updatePointer(event.clientX, event.clientY);
+            });
+
+            stageSurface.addEventListener('pointerleave', () => {
+                depthInteraction.active = false;
+                depthInteraction.targetX = 0;
+                depthInteraction.targetY = 0;
+            });
+
+            stageSurface.addEventListener('pointerdown', (event) => {
+                depthInteraction.active = true;
+                updatePointer(event.clientX, event.clientY);
+            });
+        }
+
         function applyImageStageTexture(src) {
             const backdrop = document.getElementById('backdrop-image');
             const depthLayers = [
@@ -1506,6 +1581,8 @@
             currentState.cameraDistance = lerp(currentState.cameraDistance, targetState.cameraDistance, 0.025);
             currentState.particleSpread = lerp(currentState.particleSpread, targetState.particleSpread, 0.03);
             currentState.accentHue = lerp(currentState.accentHue, targetState.accentHue, 0.03);
+            depthInteraction.currentX = lerp(depthInteraction.currentX, depthInteraction.targetX, 0.08);
+            depthInteraction.currentY = lerp(depthInteraction.currentY, depthInteraction.targetY, 0.08);
 
             setShape(targetState.shape);
 
@@ -1563,6 +1640,37 @@
                 const scaleOffset = index * 0.045;
                 plane.scale.setScalar(1 + Math.sin(elapsed * (1 + index * 0.2)) * 0.018 + scaleOffset);
             });
+
+            const stageSurface = document.querySelector('.stage-surface');
+            const depthStack = document.getElementById('depth-stack');
+            const depthLayers = [
+                document.getElementById('depth-layer-back'),
+                document.getElementById('depth-layer-mid'),
+                document.getElementById('depth-layer-front')
+            ];
+            const depthGlow = document.querySelector('.depth-glow');
+            const depthGlare = document.getElementById('depth-glare');
+            const tiltX = depthInteraction.currentY * -8;
+            const tiltY = depthInteraction.currentX * 12;
+
+            if (stageSurface && depthStack) {
+                stageSurface.style.transform = `perspective(1400px) rotateX(${tiltX * 0.38}deg) rotateY(${tiltY * 0.22}deg)`;
+                depthStack.style.transform = `rotateX(${tiltX}deg) rotateY(${tiltY}deg)`;
+            }
+
+            if (depthLayers[0] && depthLayers[1] && depthLayers[2]) {
+                depthLayers[0].style.transform = `translate3d(${5 + depthInteraction.currentX * 2.6}%, ${-3 + depthInteraction.currentY * 2.4}%, -90px) rotateY(${-10 + tiltY * 0.18}deg) rotateX(${tiltX * 0.14}deg) scale(0.92)`;
+                depthLayers[1].style.transform = `translate3d(${2 + depthInteraction.currentX * 1.8}%, ${-1 + depthInteraction.currentY * 1.6}%, -34px) rotateY(${-5 + tiltY * 0.24}deg) rotateX(${tiltX * 0.18}deg) scale(0.97)`;
+                depthLayers[2].style.transform = `translate3d(${depthInteraction.currentX * 1.2}%, ${depthInteraction.currentY * 1.1}%, 0px) rotateY(${tiltY * 0.28}deg) rotateX(${tiltX * 0.24}deg) scale(${1 + Math.abs(depthInteraction.currentX) * 0.012})`;
+            }
+
+            if (depthGlow) {
+                depthGlow.style.transform = `translate(${depthInteraction.currentX * 16}px, ${depthInteraction.currentY * 12}px) scale(${1 + Math.abs(depthInteraction.currentX) * 0.04})`;
+            }
+
+            if (depthGlare) {
+                depthGlare.style.transform = `translate(${depthInteraction.currentX * 18}px, ${depthInteraction.currentY * 14}px) rotate(${depthInteraction.currentX * 6}deg)`;
+            }
 
             const positions = particlesGeometry.attributes.position.array;
             for (let i = 0; i < particleCount; i += 1) {
@@ -1758,6 +1866,7 @@
         });
 
         initializeAuth();
+        initializeDepthInteraction();
         updateSceneStatus();
         animate();
     </script>
