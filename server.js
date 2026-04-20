@@ -277,22 +277,97 @@ function sanitizeUser(user) {
   };
 }
 
-async function fetchTutorResponse(question) {
-  if (process.env.GEMINI_API_KEY) {
-    const tutorPayload = await fetchGeminiResponse(question);
-    const image = await fetchTopicImage(question, tutorPayload).catch((error) => ({
-      error: error.message || 'Image generation failed.',
-      source: 'error'
-    }));
-    return { ...tutorPayload, image };
+function isRetryableErrorMessage(message = '') {
+  const normalized = String(message).toLowerCase();
+  return (
+    normalized.includes('429') ||
+    normalized.includes('quota') ||
+    normalized.includes('rate limit') ||
+    normalized.includes('resource exhausted') ||
+    normalized.includes('high demand') ||
+    normalized.includes('unavailable') ||
+    normalized.includes('deadline exceeded') ||
+    normalized.includes('timed out') ||
+    normalized.includes('timeout')
+  );
+}
+
+function describeServiceError(label, error) {
+  const rawMessage = error && error.message ? error.message : `${label} is temporarily unavailable.`;
+
+  if (isRetryableErrorMessage(rawMessage)) {
+    return `${label} is temporarily busy. I used a fallback explanation so the lesson can keep going.`;
   }
 
-  const tutorPayload = await fetchOpenAIResponse(question);
-  const image = await fetchTopicImage(question, tutorPayload).catch((error) => ({
-    error: error.message || 'Image lookup failed.',
-    source: 'error'
-  }));
-  return { ...tutorPayload, image };
+  return `${label} could not be reached. I used a fallback explanation so the lesson can keep going.`;
+}
+
+async function runImageLookup(question, tutorPayload) {
+  try {
+    return await Promise.race([
+      fetchTopicImage(question, tutorPayload),
+      new Promise((resolve) => {
+        setTimeout(() => resolve({
+          error: 'Image generation timed out for this request.',
+          source: 'timeout'
+        }), 12000);
+      })
+    ]);
+  } catch (error) {
+    return {
+      error: error.message || 'Image generation failed.',
+      source: 'error'
+    };
+  }
+}
+
+async function fetchTutorResponse(question) {
+  const providerAttempts = [];
+  const providerFailures = [];
+
+  if (process.env.GEMINI_API_KEY) {
+    providerAttempts.push({
+      label: 'Gemini',
+      run: () => fetchGeminiResponse(question)
+    });
+  }
+
+  if (process.env.OPENAI_API_KEY) {
+    providerAttempts.push({
+      label: 'OpenAI',
+      run: () => fetchOpenAIResponse(question)
+    });
+  }
+
+  for (const provider of providerAttempts) {
+    try {
+      const tutorPayload = await provider.run();
+      const image = await runImageLookup(question, tutorPayload);
+      return { ...tutorPayload, image };
+    } catch (error) {
+      providerFailures.push({
+        label: provider.label,
+        error
+      });
+      console.warn(`${provider.label} tutor request failed:`, error.message || error);
+    }
+  }
+
+  const fallbackPayload = buildFallbackPayload(
+    question,
+    'I could not reach the live tutor right now, so I am giving you a quick guided explanation based on the topic you asked about.'
+  );
+  const image = await runImageLookup(question, fallbackPayload);
+  const primaryFailure = providerFailures[0];
+  const failureMessage = primaryFailure
+    ? describeServiceError(primaryFailure.label, primaryFailure.error)
+    : 'No live AI provider is configured on the server, so I used the built-in lesson fallback.';
+
+  return {
+    ...fallbackPayload,
+    answer: `${failureMessage}\n\n${fallbackPayload.answer}`,
+    image
+  };
 }
 
 async function fetchOpenAIResponse(question) {
