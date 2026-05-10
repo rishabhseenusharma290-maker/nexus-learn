@@ -80,6 +80,11 @@ function loadEnvFile(filePath) {
 }
 
 function getRuntimeInfo() {
+  const geminiKey = process.env.GEMINI_API_KEY || '';
+  const geminiKeyFingerprint = geminiKey
+    ? `${geminiKey.slice(0, 6)}...${geminiKey.slice(-4)}`
+    : null;
+
   return {
     environment: RUNTIME_ENV,
     instanceId: RUNTIME_INSTANCE_ID,
@@ -87,6 +92,7 @@ function getRuntimeInfo() {
     tutorModel: DEFAULT_GEMINI_MODEL,
     tutorFallbackModels: GEMINI_FALLBACK_MODELS,
     geminiKeyLoaded: Boolean(process.env.GEMINI_API_KEY),
+    geminiKeyFingerprint,
     googleSearchConfigured: Boolean(process.env.GOOGLE_SEARCH_API_KEY && process.env.GOOGLE_SEARCH_CX),
     huggingFaceConfigured: Boolean(process.env.HF_TOKEN),
     renderService: process.env.RENDER_SERVICE_NAME || null,
@@ -935,6 +941,55 @@ function handleHealth(req, res) {
   });
 }
 
+async function handleGeminiHealth(req, res) {
+  const user = getAuthenticatedUser(req);
+
+  if (!user) {
+    sendJson(res, 401, {
+      ok: false,
+      error: 'Please sign in to run the Gemini connectivity check.',
+      reason: 'auth_session_issue',
+      runtime: getRuntimeInfo()
+    });
+    return;
+  }
+
+  if (!process.env.GEMINI_API_KEY) {
+    sendJson(res, 200, {
+      ok: false,
+      live: false,
+      reason: 'no_live_provider',
+      detail: {
+        family: 'configuration',
+        label: 'Gemini key missing',
+        message: 'No GEMINI_API_KEY is loaded on this runtime.'
+      },
+      runtime: getRuntimeInfo()
+    });
+    return;
+  }
+
+  try {
+    const tutorPayload = await fetchGeminiResponse('Reply with one short sentence confirming Gemini connectivity.');
+    sendJson(res, 200, {
+      ok: true,
+      live: true,
+      model: tutorPayload.model || DEFAULT_GEMINI_MODEL,
+      answerPreview: tutorPayload.answer,
+      runtime: getRuntimeInfo()
+    });
+  } catch (error) {
+    const detail = classifyTutorError('Gemini', error);
+    sendJson(res, 200, {
+      ok: false,
+      live: false,
+      reason: detail.code,
+      detail,
+      runtime: getRuntimeInfo()
+    });
+  }
+}
+
 function createServer() {
   return http.createServer((req, res) => {
     if (!req.url) {
@@ -971,6 +1026,11 @@ function createServer() {
 
     if (req.method === 'GET' && requestPath === '/api/health') {
       handleHealth(req, res);
+      return;
+    }
+
+    if (req.method === 'GET' && requestPath === '/api/health/gemini') {
+      handleGeminiHealth(req, res);
       return;
     }
 

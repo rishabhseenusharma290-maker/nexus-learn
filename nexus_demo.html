@@ -1407,6 +1407,10 @@
                 data.geminiKeyLoaded ? 'Gemini key loaded' : 'Gemini key missing'
             ];
 
+            if (data.geminiKeyFingerprint) {
+                runtimeParts.push(`Key ${data.geminiKeyFingerprint}`);
+            }
+
             if (data.instanceId) {
                 runtimeParts.unshift(`Instance ${data.instanceId}`);
             }
@@ -1469,6 +1473,17 @@
             return payload;
         }
 
+        async function fetchGeminiHealth() {
+            const response = await fetch('/api/health/gemini', {
+                credentials: 'same-origin'
+            });
+            const payload = await response.json();
+            if (payload.runtime) {
+                updateRuntimeDisplay(payload.runtime);
+            }
+            return payload;
+        }
+
         async function initializeAuth() {
             updateSessionPill();
             setTutorStatus('Checking', 'live', 'Checking which runtime and tutor instance you are connected to...');
@@ -1476,10 +1491,21 @@
             try {
                 await fetchHealth();
                 const session = await fetchSession();
+                let startupStatusApplied = false;
                 if (session.authenticated && session.user) {
                     unlockApp(session.user);
+                    const geminiHealth = await fetchGeminiHealth();
+                    if (geminiHealth.live) {
+                        setTutorStatus('Live', 'live', `Gemini probe succeeded via ${geminiHealth.model}.`);
+                        startupStatusApplied = true;
+                    } else if (geminiHealth.detail) {
+                        setTutorStatus('Fallback', 'fallback', `${geminiHealth.detail.label} • ${humanizeReason(geminiHealth.reason)}`);
+                        startupStatusApplied = true;
+                    }
                 }
-                setTutorStatus('Ready', 'live', 'Runtime connected. Ask a question and the tutor state will update live.');
+                if (!startupStatusApplied) {
+                    setTutorStatus('Ready', 'live', 'Runtime connected. Ask a question and the tutor state will update live.');
+                }
             } catch (error) {
                 setAuthMessage('Could not verify your session yet. You can still sign in manually.', true);
                 setTutorStatus('Offline', 'offline', 'Could not reach the local or deployed health endpoint.');
