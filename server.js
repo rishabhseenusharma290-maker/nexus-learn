@@ -24,8 +24,24 @@ const DEFAULT_HF_IMAGE_MODEL = process.env.HF_IMAGE_MODEL || 'black-forest-labs/
 const USERS_FILE = path.join(baseDir, 'users.json');
 const SESSION_COOKIE = 'nexuslearn_session';
 const AUTH_SECRET = process.env.AUTH_SECRET || process.env.GEMINI_API_KEY || 'nexuslearn-dev-secret';
-const RUNTIME_ENV =
-  process.env.RENDER_SERVICE_NAME || process.env.RENDER || process.env.RENDER_EXTERNAL_URL ? 'RENDER' : 'LOCAL';
+function detectRuntimeEnvironment() {
+  if (process.env.RENDER_SERVICE_NAME || process.env.RENDER || process.env.RENDER_EXTERNAL_URL) {
+    return 'RENDER';
+  }
+
+  if (
+    process.env.RAILWAY_PROJECT_ID ||
+    process.env.RAILWAY_SERVICE_ID ||
+    process.env.RAILWAY_SERVICE_NAME ||
+    process.env.RAILWAY_PUBLIC_DOMAIN
+  ) {
+    return 'RAILWAY';
+  }
+
+  return 'LOCAL';
+}
+
+const RUNTIME_ENV = detectRuntimeEnvironment();
 const RUNTIME_INSTANCE_ID = `${RUNTIME_ENV.toLowerCase()}-${process.pid}`;
 let activePort = null;
 let browserOpened = false;
@@ -96,7 +112,10 @@ function getRuntimeInfo() {
     googleSearchConfigured: Boolean(process.env.GOOGLE_SEARCH_API_KEY && process.env.GOOGLE_SEARCH_CX),
     huggingFaceConfigured: Boolean(process.env.HF_TOKEN),
     renderService: process.env.RENDER_SERVICE_NAME || null,
-    gitCommit: process.env.RENDER_GIT_COMMIT || null
+    railwayService: process.env.RAILWAY_SERVICE_NAME || null,
+    publicDomain: process.env.RAILWAY_PUBLIC_DOMAIN || process.env.RENDER_EXTERNAL_URL || null,
+    region: process.env.RAILWAY_REPLICA_REGION || null,
+    gitCommit: process.env.RENDER_GIT_COMMIT || process.env.RAILWAY_GIT_COMMIT_SHA || null
   };
 }
 
