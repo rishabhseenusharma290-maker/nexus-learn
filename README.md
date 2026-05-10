@@ -49,6 +49,56 @@ npm start
 http://localhost:3001/  (or the next free localhost port printed by the server)
 ```
 
+## Deploy on Railway
+
+This project is ready for Railway with config-as-code in [railway.toml](/D:/nexus_demo/railway.toml).
+
+Recommended reason to use Railway for this project:
+- your Render deployment is reaching Gemini with the correct key, but Gemini reports that the Render runtime location is not supported for API use
+- Railway lets you choose a deploy region, and this repo is preconfigured for `asia-southeast1-eqsg3a` (Singapore)
+
+### Railway steps
+
+1. Push the latest code to GitHub
+2. Create a new project in Railway
+3. Choose `Deploy from GitHub repo`
+4. Select this repository
+5. Railway will detect the app and use:
+
+```text
+Start command: npm start
+Healthcheck path: /api/health
+Region: asia-southeast1-eqsg3a
+```
+
+6. In Railway Variables, add:
+
+```text
+GEMINI_API_KEY=your_gemini_key
+GEMINI_MODEL=gemini-2.5-flash
+GEMINI_FALLBACK_MODELS=gemini-2.5-flash-lite,gemini-2.0-flash
+GOOGLE_SEARCH_API_KEY=your_google_search_key
+GOOGLE_SEARCH_CX=your_programmable_search_engine_id
+HF_TOKEN=your_huggingface_token
+AUTH_SECRET=any_long_random_secret
+```
+
+7. Deploy the service
+8. Open the Railway URL
+9. Sign in and test:
+
+```text
+/api/health
+/api/health/gemini
+```
+
+### What Railway uses from this repo
+
+- [railway.toml](/D:/nexus_demo/railway.toml) sets the start command, healthcheck, restart policy, and preferred region
+- [server.js](/D:/nexus_demo/server.js) already listens on Railway's injected `PORT`
+- [server.js](/D:/nexus_demo/server.js) already exposes `/api/health` for deployment health checks
+- [server.js](/D:/nexus_demo/server.js) already exposes `/api/health/gemini` so you can verify live Gemini reachability from the deployed runtime
+
 ## How it works
 
 - `server.js` serves the static app and exposes `POST /api/chat`
@@ -82,5 +132,6 @@ http://localhost:3001/  (or the next free localhost port printed by the server)
 - The UI shows a runtime badge so you can tell whether you are on `LOCAL` or `RENDER`, along with the active port and tutor model.
 - If the model returns non-JSON text, the server falls back to a best-effort animation profile based on the question.
 - If Gemini falls back, the UI now shows a precise reason category such as quota, high demand, auth, or network.
+- If `/api/health/gemini` reports `User location is not supported for the API use`, the problem is the deployment region/provider, not the API key itself.
 - Some external image hosts may block hotlinking; in those cases the app falls back to any available configured image provider.
 - If image generation or image search is unavailable, the UI shows the returned error message in the image panel.
