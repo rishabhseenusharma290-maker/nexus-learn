@@ -1934,7 +1934,8 @@
                 appendMessage('ai', 'Nexus', payload.answer);
                 applyAnimationPayload(payload.animation || {});
                 if (payload.tutor && payload.tutor.live) {
-                    setTutorStatus('Live', 'live', `Live tutor: ${payload.tutor.provider || 'gemini'} on ${runtimeInfo ? runtimeInfo.environment : 'current runtime'}.`);
+                    const liveModel = payload.tutor.model || (runtimeInfo && runtimeInfo.tutorModel) || 'gemini';
+                    setTutorStatus('Live', 'live', `Live tutor: ${payload.tutor.provider || 'gemini'} via ${liveModel} on ${runtimeInfo ? runtimeInfo.environment : 'current runtime'}.`);
                 } else if (payload.tutor) {
                     const fallbackReason = humanizeReason(payload.tutor.fallbackReason);
                     const providerLabel =

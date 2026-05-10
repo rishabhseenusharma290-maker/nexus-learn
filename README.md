@@ -31,6 +31,7 @@ Optional model overrides:
 
 ```powershell
 $env:GEMINI_MODEL="gemini-2.5-flash"
+$env:GEMINI_FALLBACK_MODELS="gemini-2.5-flash-lite,gemini-2.0-flash"
 $env:GOOGLE_SEARCH_API_KEY="your_google_custom_search_api_key_here"
 $env:GOOGLE_SEARCH_CX="your_programmable_search_engine_id_here"
 $env:HF_TOKEN="your_huggingface_token_here"
@@ -54,6 +55,7 @@ http://localhost:3001/  (or the next free localhost port printed by the server)
 - `GET /api/health` reports the active runtime, port, tutor model, and whether the Gemini key is loaded
 - The root URL `/` now opens the app directly, so you do not need to type the HTML filename
 - The backend calls Gemini when `GEMINI_API_KEY` is present
+- If the primary Gemini model is under heavy demand, the backend retries and can fall through to `GEMINI_FALLBACK_MODELS`
 - The model is asked for JSON with both:
   - a tutor answer
   - animation settings for the 3D scene

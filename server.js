@@ -14,6 +14,11 @@ loadEnvFile(path.join(baseDir, '.env'));
 
 const DEFAULT_PORT = parseInt(process.env.PORT, 10) || 3001;
 const DEFAULT_GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+const GEMINI_FALLBACK_MODELS = (process.env.GEMINI_FALLBACK_MODELS || 'gemini-2.5-flash-lite,gemini-2.0-flash')
+  .split(',')
+  .map((item) => item.trim())
+  .filter(Boolean)
+  .filter((model, index, models) => models.indexOf(model) === index && model !== DEFAULT_GEMINI_MODEL);
 const GOOGLE_SEARCH_API_URL = 'https://customsearch.googleapis.com/customsearch/v1';
 const DEFAULT_HF_IMAGE_MODEL = process.env.HF_IMAGE_MODEL || 'black-forest-labs/FLUX.1-schnell';
 const USERS_FILE = path.join(baseDir, 'users.json');
@@ -80,6 +85,7 @@ function getRuntimeInfo() {
     instanceId: RUNTIME_INSTANCE_ID,
     port: activePort,
     tutorModel: DEFAULT_GEMINI_MODEL,
+    tutorFallbackModels: GEMINI_FALLBACK_MODELS,
     geminiKeyLoaded: Boolean(process.env.GEMINI_API_KEY),
     googleSearchConfigured: Boolean(process.env.GOOGLE_SEARCH_API_KEY && process.env.GOOGLE_SEARCH_CX),
     huggingFaceConfigured: Boolean(process.env.HF_TOKEN),
@@ -460,6 +466,7 @@ async function fetchTutorResponse(question) {
         tutor: {
           live: true,
           provider: provider.label.toLowerCase(),
+          model: tutorPayload.model || DEFAULT_GEMINI_MODEL,
           fallbackReason: null,
           detail: null
         }
@@ -510,6 +517,40 @@ async function fetchTutorResponse(question) {
 }
 
 async function fetchGeminiResponse(question) {
+  const candidateModels = [DEFAULT_GEMINI_MODEL, ...GEMINI_FALLBACK_MODELS];
+  const attemptErrors = [];
+
+  for (const modelName of candidateModels) {
+    try {
+      const response = await fetchGeminiResponseForModel(question, modelName);
+      return {
+        ...response,
+        model: modelName
+      };
+    } catch (error) {
+      attemptErrors.push({ modelName, error });
+      const detail = classifyTutorError('Gemini', error);
+      console.warn(`Gemini attempt failed for ${modelName} [${detail.code}]:`, detail.message);
+
+      if (!isRetryableErrorMessage(detail.message)) {
+        throw error;
+      }
+    }
+  }
+
+  const lastAttempt = attemptErrors[attemptErrors.length - 1];
+  if (lastAttempt) {
+    throw lastAttempt.error;
+  }
+
+  throw new Error('No Gemini model could be attempted.');
+}
+
+async function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function fetchGeminiResponseForModel(question, modelName) {
   if (typeof fetch !== 'function') {
     throw new Error('This app requires Node.js 18 or newer because it uses the built-in fetch API.');
   }
@@ -528,60 +569,72 @@ async function fetchGeminiResponse(question) {
     'animation.particleSpread must be a number from 6 to 24.'
   ].join(' ');
 
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${DEFAULT_GEMINI_MODEL}:generateContent`;
-  const apiResponse = await fetch(endpoint, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-goog-api-key': process.env.GEMINI_API_KEY
-    },
-    body: JSON.stringify({
-      system_instruction: {
-        parts: [{ text: instructions }]
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent`;
+  let lastError = null;
+
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const apiResponse = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-goog-api-key': process.env.GEMINI_API_KEY
       },
-      contents: [
-        {
-          role: 'user',
-          parts: [{ text: question }]
+      body: JSON.stringify({
+        system_instruction: {
+          parts: [{ text: instructions }]
+        },
+        contents: [
+          {
+            role: 'user',
+            parts: [{ text: question }]
+          }
+        ],
+        generationConfig: {
+          responseMimeType: 'application/json'
         }
-      ],
-      generationConfig: {
-        responseMimeType: 'application/json'
+      }),
+      signal: AbortSignal.timeout(30000)
+    });
+
+    const payload = await apiResponse.json().catch(() => ({}));
+
+    if (apiResponse.ok) {
+      const rawText =
+        payload &&
+        payload.candidates &&
+        payload.candidates[0] &&
+        payload.candidates[0].content &&
+        Array.isArray(payload.candidates[0].content.parts)
+          ? payload.candidates[0].content.parts
+              .map((part) => (typeof part.text === 'string' ? part.text : ''))
+              .join('')
+          : '';
+
+      try {
+        const parsed = JSON.parse(rawText);
+        return {
+          answer: parsed.answer || buildFallbackPayload(question).answer,
+          animation: normalizeAnimationPayload(parsed.animation)
+        };
+      } catch (error) {
+        return buildFallbackPayload(question, rawText);
       }
-    }),
-    signal: AbortSignal.timeout(30000)
-  });
+    }
 
-  const payload = await apiResponse.json().catch(() => ({}));
-
-  if (!apiResponse.ok) {
     const message =
       payload.error && payload.error.message
         ? payload.error.message
         : `Gemini request failed with status ${apiResponse.status}.`;
-    throw new Error(message);
+    lastError = new Error(`[${modelName}] ${message}`);
+
+    if (!isRetryableErrorMessage(message) || attempt === 2) {
+      throw lastError;
+    }
+
+    await sleep(900 * (attempt + 1));
   }
 
-  const rawText =
-    payload &&
-    payload.candidates &&
-    payload.candidates[0] &&
-    payload.candidates[0].content &&
-    Array.isArray(payload.candidates[0].content.parts)
-      ? payload.candidates[0].content.parts
-          .map((part) => (typeof part.text === 'string' ? part.text : ''))
-          .join('')
-      : '';
-
-  try {
-    const parsed = JSON.parse(rawText);
-    return {
-      answer: parsed.answer || buildFallbackPayload(question).answer,
-      animation: normalizeAnimationPayload(parsed.animation)
-    };
-  } catch (error) {
-    return buildFallbackPayload(question, rawText);
-  }
+  throw lastError || new Error(`[${modelName}] Gemini request failed.`);
 }
 
 function buildImagePrompt(question, tutorPayload) {
@@ -953,6 +1006,7 @@ function startServer(port = DEFAULT_PORT, attempts = 0) {
     console.log(`[${RUNTIME_ENV}] Nexus Learn running at ${url}`);
     console.log(`[${RUNTIME_ENV}] Health endpoint: ${url}api/health`);
     console.log(`[${RUNTIME_ENV}] Tutor model: ${DEFAULT_GEMINI_MODEL}`);
+    console.log(`[${RUNTIME_ENV}] Gemini fallback models: ${GEMINI_FALLBACK_MODELS.length ? GEMINI_FALLBACK_MODELS.join(', ') : 'none'}`);
     console.log(`[${RUNTIME_ENV}] Gemini key loaded: ${process.env.GEMINI_API_KEY ? 'yes' : 'no'}`);
     openLocalBrowser(url);
   });
