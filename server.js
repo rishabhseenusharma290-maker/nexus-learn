@@ -6,6 +6,7 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const { exec } = require('child_process');
 
 const baseDir = path.resolve(__dirname);
 
@@ -18,6 +19,11 @@ const DEFAULT_HF_IMAGE_MODEL = process.env.HF_IMAGE_MODEL || 'black-forest-labs/
 const USERS_FILE = path.join(baseDir, 'users.json');
 const SESSION_COOKIE = 'nexuslearn_session';
 const AUTH_SECRET = process.env.AUTH_SECRET || process.env.GEMINI_API_KEY || 'nexuslearn-dev-secret';
+const RUNTIME_ENV =
+  process.env.RENDER_SERVICE_NAME || process.env.RENDER || process.env.RENDER_EXTERNAL_URL ? 'RENDER' : 'LOCAL';
+const RUNTIME_INSTANCE_ID = `${RUNTIME_ENV.toLowerCase()}-${process.pid}`;
+let activePort = null;
+let browserOpened = false;
 
 const mimeTypes = {
   '.html': 'text/html; charset=utf-8',
@@ -68,10 +74,34 @@ function loadEnvFile(filePath) {
   }
 }
 
+function getRuntimeInfo() {
+  return {
+    environment: RUNTIME_ENV,
+    instanceId: RUNTIME_INSTANCE_ID,
+    port: activePort,
+    tutorModel: DEFAULT_GEMINI_MODEL,
+    geminiKeyLoaded: Boolean(process.env.GEMINI_API_KEY),
+    googleSearchConfigured: Boolean(process.env.GOOGLE_SEARCH_API_KEY && process.env.GOOGLE_SEARCH_CX),
+    huggingFaceConfigured: Boolean(process.env.HF_TOKEN),
+    renderService: process.env.RENDER_SERVICE_NAME || null,
+    gitCommit: process.env.RENDER_GIT_COMMIT || null
+  };
+}
+
+function buildCommonHeaders() {
+  return {
+    'Cache-Control': 'no-store',
+    'X-Nexus-Environment': RUNTIME_ENV,
+    'X-Nexus-Instance': RUNTIME_INSTANCE_ID,
+    'X-Nexus-Port': String(activePort || ''),
+    'X-Nexus-Tutor-Model': DEFAULT_GEMINI_MODEL
+  };
+}
+
 function sendJson(res, statusCode, payload) {
   res.writeHead(statusCode, {
     'Content-Type': 'application/json; charset=utf-8',
-    'Cache-Control': 'no-store'
+    ...buildCommonHeaders()
   });
   res.end(JSON.stringify(payload));
 }
@@ -273,6 +303,84 @@ function sanitizeUser(user) {
   };
 }
 
+function getErrorMessage(error) {
+  return error && error.message ? String(error.message) : String(error || 'Unknown error');
+}
+
+function classifyTutorError(label, error) {
+  const message = getErrorMessage(error);
+  const normalized = message.toLowerCase();
+  const prefix = label.toLowerCase();
+
+  if (
+    normalized.includes('api key not valid') ||
+    normalized.includes('permission denied') ||
+    normalized.includes('service disabled') ||
+    normalized.includes('unauthorized') ||
+    normalized.includes('forbidden')
+  ) {
+    return {
+      code: `${prefix}_auth`,
+      family: 'auth',
+      label: `${label} authorization issue`,
+      message
+    };
+  }
+
+  if (
+    normalized.includes('quota') ||
+    normalized.includes('resource exhausted') ||
+    normalized.includes('rate limit') ||
+    normalized.includes('429')
+  ) {
+    return {
+      code: `${prefix}_quota`,
+      family: 'quota',
+      label: `${label} quota issue`,
+      message
+    };
+  }
+
+  if (
+    normalized.includes('high demand') ||
+    normalized.includes('unavailable') ||
+    normalized.includes('temporarily busy') ||
+    normalized.includes('503')
+  ) {
+    return {
+      code: `${prefix}_unavailable`,
+      family: 'unavailable',
+      label: `${label} unavailable`,
+      message
+    };
+  }
+
+  if (
+    normalized.includes('fetch failed') ||
+    normalized.includes('network') ||
+    normalized.includes('socket') ||
+    normalized.includes('enotfound') ||
+    normalized.includes('econnreset') ||
+    normalized.includes('timed out') ||
+    normalized.includes('timeout') ||
+    normalized.includes('deadline exceeded')
+  ) {
+    return {
+      code: `${prefix}_network`,
+      family: 'network',
+      label: `${label} network issue`,
+      message
+    };
+  }
+
+  return {
+    code: `${prefix}_error`,
+    family: 'unknown',
+    label: `${label} error`,
+    message
+  };
+}
+
 function isRetryableErrorMessage(message = '') {
   const normalized = String(message).toLowerCase();
   return (
@@ -288,11 +396,25 @@ function isRetryableErrorMessage(message = '') {
   );
 }
 
-function describeServiceError(label, error) {
-  const rawMessage = error && error.message ? error.message : `${label} is temporarily unavailable.`;
+function describeServiceError(label, detail) {
+  if (!detail) {
+    return `${label} could not be reached. I used a fallback explanation so the lesson can keep going.`;
+  }
 
-  if (isRetryableErrorMessage(rawMessage)) {
+  if (detail.family === 'quota') {
+    return `${label} hit a quota limit, so I used a fallback explanation to keep the lesson moving.`;
+  }
+
+  if (detail.family === 'unavailable') {
     return `${label} is temporarily busy. I used a fallback explanation so the lesson can keep going.`;
+  }
+
+  if (detail.family === 'auth') {
+    return `${label} is configured but not authorized correctly right now, so I used a fallback explanation.`;
+  }
+
+  if (detail.family === 'network') {
+    return `${label} could not be reached over the network, so I used a fallback explanation.`;
   }
 
   return `${label} could not be reached. I used a fallback explanation so the lesson can keep going.`;
@@ -332,13 +454,24 @@ async function fetchTutorResponse(question) {
     try {
       const tutorPayload = await provider.run();
       const image = await runImageLookup(question, tutorPayload);
-      return { ...tutorPayload, image };
+      return {
+        ...tutorPayload,
+        image,
+        tutor: {
+          live: true,
+          provider: provider.label.toLowerCase(),
+          fallbackReason: null,
+          detail: null
+        }
+      };
     } catch (error) {
+      const detail = classifyTutorError(provider.label, error);
       providerFailures.push({
         label: provider.label,
-        error
+        error,
+        detail
       });
-      console.warn(`${provider.label} tutor request failed:`, error.message || error);
+      console.warn(`${provider.label} tutor request failed [${detail.code}]:`, detail.message);
     }
   }
 
@@ -348,14 +481,31 @@ async function fetchTutorResponse(question) {
   );
   const image = await runImageLookup(question, fallbackPayload);
   const primaryFailure = providerFailures[0];
+  const failureDetail = primaryFailure ? primaryFailure.detail : null;
   const failureMessage = primaryFailure
-    ? describeServiceError(primaryFailure.label, primaryFailure.error)
+    ? describeServiceError(primaryFailure.label, failureDetail)
     : 'No live AI provider is configured on the server, so I used the built-in lesson fallback.';
 
   return {
     ...fallbackPayload,
     answer: `${failureMessage}\n\n${fallbackPayload.answer}`,
-    image
+    image,
+    tutor: {
+      live: false,
+      provider: primaryFailure ? primaryFailure.label.toLowerCase() : 'fallback',
+      fallbackReason: failureDetail ? failureDetail.code : 'no_live_provider',
+      detail: failureDetail
+        ? {
+            family: failureDetail.family,
+            label: failureDetail.label,
+            message: failureDetail.message
+          }
+        : {
+            family: 'configuration',
+            label: 'No live provider configured',
+            message: 'No Gemini API key is loaded on this server.'
+          }
+    }
   };
 }
 
@@ -578,7 +728,7 @@ function serveStatic(req, res) {
   const requestPath = req.url.split('?')[0];
 
   if (!isSafePath(requestPath)) {
-    sendJson(res, 403, { error: 'Forbidden path.' });
+    sendJson(res, 403, { error: 'Forbidden path.', reason: 'forbidden_path', runtime: getRuntimeInfo() });
     return;
   }
 
@@ -588,6 +738,7 @@ function serveStatic(req, res) {
     if (err || !stats.isFile()) {
       res.statusCode = 404;
       res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+      Object.entries(buildCommonHeaders()).forEach(([key, value]) => res.setHeader(key, value));
       res.end('404 Not Found');
       return;
     }
@@ -597,7 +748,7 @@ function serveStatic(req, res) {
 
     res.writeHead(200, {
       'Content-Type': contentType,
-      'Cache-Control': 'no-store'
+      ...buildCommonHeaders()
     });
 
     fs.createReadStream(filePath).pipe(res);
@@ -608,7 +759,11 @@ async function handleApiChat(req, res) {
   try {
     const authenticatedUser = getAuthenticatedUser(req);
     if (!authenticatedUser) {
-      sendJson(res, 401, { error: 'Please sign in to continue.' });
+      sendJson(res, 401, {
+        error: 'Please sign in to continue.',
+        reason: 'auth_session_issue',
+        runtime: getRuntimeInfo()
+      });
       return;
     }
 
@@ -616,14 +771,25 @@ async function handleApiChat(req, res) {
     const question = typeof body.question === 'string' ? body.question.trim() : '';
 
     if (!question) {
-      sendJson(res, 400, { error: 'Please send a non-empty question.' });
+      sendJson(res, 400, {
+        error: 'Please send a non-empty question.',
+        reason: 'invalid_question',
+        runtime: getRuntimeInfo()
+      });
       return;
     }
 
     const responsePayload = await fetchTutorResponse(question);
-    sendJson(res, 200, responsePayload);
+    sendJson(res, 200, {
+      ...responsePayload,
+      runtime: getRuntimeInfo()
+    });
   } catch (error) {
-    sendJson(res, 500, { error: error.message || 'Unexpected server error.' });
+    sendJson(res, 500, {
+      error: error.message || 'Unexpected server error.',
+      reason: 'server_error',
+      runtime: getRuntimeInfo()
+    });
   }
 }
 
@@ -660,9 +826,9 @@ async function handleRegister(req, res) {
     users.push(newUser);
     saveUsers(users);
     setSessionCookie(res, email);
-    sendJson(res, 201, { user: sanitizeUser(newUser) });
+    sendJson(res, 201, { user: sanitizeUser(newUser), runtime: getRuntimeInfo() });
   } catch (error) {
-    sendJson(res, 500, { error: error.message || 'Could not create account.' });
+    sendJson(res, 500, { error: error.message || 'Could not create account.', reason: 'server_error', runtime: getRuntimeInfo() });
   }
 }
 
@@ -679,27 +845,40 @@ async function handleLogin(req, res) {
     }
 
     setSessionCookie(res, email);
-    sendJson(res, 200, { user: sanitizeUser(user) });
+    sendJson(res, 200, { user: sanitizeUser(user), runtime: getRuntimeInfo() });
   } catch (error) {
-    sendJson(res, 500, { error: error.message || 'Could not sign in.' });
+    sendJson(res, 500, { error: error.message || 'Could not sign in.', reason: 'server_error', runtime: getRuntimeInfo() });
   }
 }
 
 function handleLogout(res) {
   clearSessionCookie(res);
-  sendJson(res, 200, { ok: true });
+  sendJson(res, 200, { ok: true, runtime: getRuntimeInfo() });
 }
 
 function handleSession(req, res) {
   const user = getAuthenticatedUser(req);
   if (!user) {
-    sendJson(res, 200, { authenticated: false });
+    sendJson(res, 200, { authenticated: false, runtime: getRuntimeInfo() });
     return;
   }
 
   sendJson(res, 200, {
     authenticated: true,
-    user: sanitizeUser(user)
+    user: sanitizeUser(user),
+    runtime: getRuntimeInfo()
+  });
+}
+
+function handleHealth(req, res) {
+  const user = getAuthenticatedUser(req);
+  sendJson(res, 200, {
+    ok: true,
+    runtime: getRuntimeInfo(),
+    auth: {
+      authenticated: Boolean(user),
+      email: user ? user.email : null
+    }
   });
 }
 
@@ -737,6 +916,11 @@ function createServer() {
       return;
     }
 
+    if (req.method === 'GET' && requestPath === '/api/health') {
+      handleHealth(req, res);
+      return;
+    }
+
     if (req.method !== 'GET' && req.method !== 'HEAD') {
       sendJson(res, 405, { error: 'Method not allowed.' });
       return;
@@ -744,6 +928,15 @@ function createServer() {
 
     serveStatic(req, res);
   });
+}
+
+function openLocalBrowser(url) {
+  if (browserOpened || process.platform !== 'win32' || process.env.NEXUS_AUTO_OPEN !== '1' || RUNTIME_ENV !== 'LOCAL') {
+    return;
+  }
+
+  browserOpened = true;
+  exec(`start "" "${url}"`);
 }
 
 function startServer(port = DEFAULT_PORT, attempts = 0) {
@@ -755,7 +948,13 @@ function startServer(port = DEFAULT_PORT, attempts = 0) {
   const server = createServer();
 
   server.listen(port, () => {
-    console.log(`Nexus Learn running at http://localhost:${port}/`);
+    activePort = port;
+    const url = `http://localhost:${port}/`;
+    console.log(`[${RUNTIME_ENV}] Nexus Learn running at ${url}`);
+    console.log(`[${RUNTIME_ENV}] Health endpoint: ${url}api/health`);
+    console.log(`[${RUNTIME_ENV}] Tutor model: ${DEFAULT_GEMINI_MODEL}`);
+    console.log(`[${RUNTIME_ENV}] Gemini key loaded: ${process.env.GEMINI_API_KEY ? 'yes' : 'no'}`);
+    openLocalBrowser(url);
   });
 
   server.on('error', (err) => {

@@ -734,6 +734,32 @@
             font-size: 12px;
         }
 
+        .section-pill.status-live {
+            background: rgba(111, 255, 209, 0.12);
+            border-color: rgba(111, 255, 209, 0.3);
+            color: var(--accent);
+        }
+
+        .section-pill.status-fallback {
+            background: rgba(255, 193, 94, 0.12);
+            border-color: rgba(255, 193, 94, 0.3);
+            color: #ffd27f;
+        }
+
+        .section-pill.status-auth,
+        .section-pill.status-offline {
+            background: rgba(255, 122, 122, 0.12);
+            border-color: rgba(255, 122, 122, 0.3);
+            color: #ff9f9f;
+        }
+
+        .runtime-note {
+            margin: 6px 0 0;
+            color: var(--muted);
+            font-size: 12px;
+            line-height: 1.45;
+        }
+
         .control-row {
             display: flex;
             align-items: center;
@@ -1042,8 +1068,10 @@
                 <div class="brand-row">
                     <h2 class="brand-title">Nexus Learn</h2>
                     <span class="section-pill" id="topic-image-source">Waiting</span>
+                    <span class="section-pill" id="runtime-pill">Detecting runtime</span>
                 </div>
                 <p class="brand-copy">Ask a real question and the image becomes the atmosphere, while the left-side concept stage builds a fast 2.5D interpretation around the same topic.</p>
+                <p class="runtime-note" id="runtime-note">Checking active environment, port, and tutor model...</p>
             </div>
             <div class="topbar-right">
                 <span class="section-pill" id="session-pill">Interactive</span>
@@ -1115,7 +1143,9 @@
                         <strong>Conversation</strong>
                         <span class="tiny-note">Ask anything and the scene will adapt in real time.</span>
                     </div>
+                    <span class="section-pill" id="tutor-status-pill">Idle</span>
                 </div>
+                <div class="tiny-note" id="tutor-status-note">Tutor state will appear here once the runtime check completes.</div>
                 <div id="chat-box">
                     <div class="msg ai">
                         <span class="meta">Nexus</span>
@@ -1134,6 +1164,7 @@
     <script>
         let authMode = 'create';
         let activeUser = null;
+        let runtimeInfo = null;
 
         const THEME_PRESETS = {
             generic: { backgroundTop: '#05121a', backgroundBottom: '#01040a' },
@@ -1310,6 +1341,79 @@
             pill.textContent = 'Interactive';
         }
 
+        function humanizeReason(code = '') {
+            const reason = String(code || '').toLowerCase();
+            if (reason === 'auth_session_issue') {
+                return 'Sign in required';
+            }
+            if (reason.includes('quota')) {
+                return 'Quota limit reached';
+            }
+            if (reason.includes('unavailable')) {
+                return 'Provider under high demand';
+            }
+            if (reason.includes('network')) {
+                return 'Network connection issue';
+            }
+            if (reason.includes('auth')) {
+                return 'Provider authorization issue';
+            }
+            if (reason === 'no_live_provider') {
+                return 'No live tutor provider configured';
+            }
+            if (reason === 'no_running_server') {
+                return 'No running server detected';
+            }
+            if (reason) {
+                return reason.replace(/_/g, ' ');
+            }
+            return 'Live tutor ready';
+        }
+
+        function setTutorStatus(label, tone = 'live', detail = '') {
+            const pill = document.getElementById('tutor-status-pill');
+            const note = document.getElementById('tutor-status-note');
+            pill.textContent = label;
+            pill.classList.remove('status-live', 'status-fallback', 'status-auth', 'status-offline');
+
+            if (tone === 'fallback') {
+                pill.classList.add('status-fallback');
+            } else if (tone === 'auth') {
+                pill.classList.add('status-auth');
+            } else if (tone === 'offline') {
+                pill.classList.add('status-offline');
+            } else {
+                pill.classList.add('status-live');
+            }
+
+            note.textContent = detail || 'Tutor state ready.';
+        }
+
+        function updateRuntimeDisplay(payload) {
+            const data = payload && payload.runtime ? payload.runtime : payload;
+            if (!data) {
+                return;
+            }
+
+            runtimeInfo = data;
+            const runtimePill = document.getElementById('runtime-pill');
+            const runtimeNote = document.getElementById('runtime-note');
+            const envLabel = data.environment || 'UNKNOWN';
+            const portLabel = data.port ? `:${data.port}` : '';
+            runtimePill.textContent = `${envLabel}${portLabel}`;
+
+            const runtimeParts = [
+                `Model ${data.tutorModel || 'unknown'}`,
+                data.geminiKeyLoaded ? 'Gemini key loaded' : 'Gemini key missing'
+            ];
+
+            if (data.instanceId) {
+                runtimeParts.unshift(`Instance ${data.instanceId}`);
+            }
+
+            runtimeNote.textContent = runtimeParts.join(' • ');
+        }
+
         function unlockApp(user) {
             activeUser = user;
             document.getElementById('auth-layer').classList.add('hidden');
@@ -1347,19 +1451,38 @@
             const response = await fetch('/api/auth/session', {
                 credentials: 'same-origin'
             });
-            return response.json();
+            const payload = await response.json();
+            if (payload.runtime) {
+                updateRuntimeDisplay(payload.runtime);
+            }
+            return payload;
+        }
+
+        async function fetchHealth() {
+            const response = await fetch('/api/health', {
+                credentials: 'same-origin'
+            });
+            const payload = await response.json();
+            if (payload.runtime) {
+                updateRuntimeDisplay(payload.runtime);
+            }
+            return payload;
         }
 
         async function initializeAuth() {
             updateSessionPill();
+            setTutorStatus('Checking', 'live', 'Checking which runtime and tutor instance you are connected to...');
 
             try {
+                await fetchHealth();
                 const session = await fetchSession();
                 if (session.authenticated && session.user) {
                     unlockApp(session.user);
                 }
+                setTutorStatus('Ready', 'live', 'Runtime connected. Ask a question and the tutor state will update live.');
             } catch (error) {
                 setAuthMessage('Could not verify your session yet. You can still sign in manually.', true);
+                setTutorStatus('Offline', 'offline', 'Could not reach the local or deployed health endpoint.');
             }
 
             document.getElementById('create-tab').addEventListener('click', () => switchAuthMode('create'));
@@ -1403,6 +1526,9 @@
                         }
 
                         setAuthMessage();
+                        if (payload.runtime) {
+                            updateRuntimeDisplay(payload.runtime);
+                        }
                         unlockApp(payload.user);
                     })
                     .catch((error) => {
@@ -1421,6 +1547,7 @@
                 document.getElementById('auth-form').reset();
                 switchAuthMode('login');
                 updateSessionPill();
+                setTutorStatus('Signed out', 'auth', 'Session cleared. Sign in again to use the live tutor.');
             });
 
             switchAuthMode('create');
@@ -1778,6 +1905,7 @@
 
             const loadingMessage = appendMessage('ai', 'Nexus', 'Thinking and reshaping the scene...');
             setImageState({ loading: true });
+            setTutorStatus('Thinking', 'live', 'Sending your question to the active tutor runtime...');
 
             try {
                 const response = await fetch('/api/chat', {
@@ -1787,6 +1915,9 @@
                 });
 
                 const payload = await response.json();
+                if (payload.runtime) {
+                    updateRuntimeDisplay(payload.runtime);
+                }
                 loadingMessage.remove();
 
                 if (!response.ok) {
@@ -1795,12 +1926,25 @@
                         document.getElementById('auth-layer').classList.remove('hidden');
                         switchAuthMode('login');
                         updateSessionPill();
+                        setTutorStatus('Auth', 'auth', humanizeReason(payload.reason || 'auth_session_issue'));
                     }
                     throw new Error(payload.error || 'The tutor endpoint failed to respond.');
                 }
 
                 appendMessage('ai', 'Nexus', payload.answer);
                 applyAnimationPayload(payload.animation || {});
+                if (payload.tutor && payload.tutor.live) {
+                    setTutorStatus('Live', 'live', `Live tutor: ${payload.tutor.provider || 'gemini'} on ${runtimeInfo ? runtimeInfo.environment : 'current runtime'}.`);
+                } else if (payload.tutor) {
+                    const fallbackReason = humanizeReason(payload.tutor.fallbackReason);
+                    const providerLabel =
+                        payload.tutor.detail && payload.tutor.detail.label
+                            ? payload.tutor.detail.label
+                            : `Fallback from ${payload.tutor.provider || 'tutor'}`;
+                    setTutorStatus('Fallback', 'fallback', `${providerLabel} • ${fallbackReason}`);
+                } else {
+                    setTutorStatus('Ready', 'live', 'Tutor response received.');
+                }
                 if (payload.image && payload.image.url) {
                     setImageState({
                         url: payload.image.url,
@@ -1833,6 +1977,7 @@
             } catch (error) {
                 loadingMessage.remove();
                 appendMessage('ai', 'Nexus', `I could not reach the tutor service. ${error.message}`);
+                setTutorStatus('Offline', 'offline', humanizeReason('no_running_server'));
                 setImageState({
                     source: 'Offline',
                     placeholder: 'The image could not be generated because the tutor request failed.',
