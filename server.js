@@ -7,21 +7,17 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
-const OPENAI_API_URL = 'https://api.openai.com/v1/responses';
 const baseDir = path.resolve(__dirname);
 
 loadEnvFile(path.join(baseDir, '.env'));
 
 const DEFAULT_PORT = parseInt(process.env.PORT, 10) || 3001;
-const DEFAULT_MODEL = process.env.OPENAI_MODEL || 'gpt-4o-mini';
 const DEFAULT_GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
-const DEFAULT_GEMINI_IMAGE_MODEL = process.env.GEMINI_IMAGE_MODEL || 'gemini-2.5-flash-image';
 const GOOGLE_SEARCH_API_URL = 'https://customsearch.googleapis.com/customsearch/v1';
 const DEFAULT_HF_IMAGE_MODEL = process.env.HF_IMAGE_MODEL || 'black-forest-labs/FLUX.1-schnell';
 const USERS_FILE = path.join(baseDir, 'users.json');
 const SESSION_COOKIE = 'nexuslearn_session';
-const AUTH_SECRET =
-  process.env.AUTH_SECRET || process.env.GEMINI_API_KEY || process.env.OPENAI_API_KEY || 'nexuslearn-dev-secret';
+const AUTH_SECRET = process.env.AUTH_SECRET || process.env.GEMINI_API_KEY || 'nexuslearn-dev-secret';
 
 const mimeTypes = {
   '.html': 'text/html; charset=utf-8',
@@ -332,13 +328,6 @@ async function fetchTutorResponse(question) {
     });
   }
 
-  if (process.env.OPENAI_API_KEY) {
-    providerAttempts.push({
-      label: 'OpenAI',
-      run: () => fetchOpenAIResponse(question)
-    });
-  }
-
   for (const provider of providerAttempts) {
     try {
       const tutorPayload = await provider.run();
@@ -368,73 +357,6 @@ async function fetchTutorResponse(question) {
     answer: `${failureMessage}\n\n${fallbackPayload.answer}`,
     image
   };
-}
-
-async function fetchOpenAIResponse(question) {
-  if (typeof fetch !== 'function') {
-    throw new Error('This app requires Node.js 18 or newer because it uses the built-in fetch API.');
-  }
-
-  const instructions = [
-    'You are Nexus Learn, a concise educational tutor.',
-    'Answer the learner clearly in 2 to 5 sentences.',
-    'If the question is ambiguous, answer helpfully and note any uncertainty.',
-    'Return valid JSON only with the shape {"answer": string, "animation": {...}}.',
-    'animation.theme must be one of generic, space, atom, math, biology, earth, history.',
-    'animation.motion must be one of calm, pulse, orbit, wave, surge.',
-    'animation.shape must be one of icosahedron, sphere, torus, knot.',
-    'animation.intensity must be a number from 0.1 to 1.',
-    'animation.accentHue must be a number from 0 to 360.',
-    'animation.cameraDistance must be a number from 3 to 10.',
-    'animation.particleSpread must be a number from 6 to 24.'
-  ].join(' ');
-
-  const apiResponse = await fetch(OPENAI_API_URL, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${process.env.OPENAI_API_KEY}`
-    },
-    body: JSON.stringify({
-      model: DEFAULT_MODEL,
-      input: [
-        {
-          role: 'system',
-          content: [{ type: 'input_text', text: instructions }]
-        },
-        {
-          role: 'user',
-          content: [{ type: 'input_text', text: question }]
-        }
-      ],
-      text: {
-        format: { type: 'json_object' }
-      }
-    }),
-    signal: AbortSignal.timeout(30000)
-  });
-
-  const payload = await apiResponse.json().catch(() => ({}));
-
-  if (!apiResponse.ok) {
-    const message =
-      payload.error && payload.error.message
-        ? payload.error.message
-        : `OpenAI request failed with status ${apiResponse.status}.`;
-    throw new Error(message);
-  }
-
-  const rawText = typeof payload.output_text === 'string' ? payload.output_text : '';
-
-  try {
-    const parsed = JSON.parse(rawText);
-    return {
-      answer: parsed.answer || buildFallbackPayload(question).answer,
-      animation: normalizeAnimationPayload(parsed.animation)
-    };
-  } catch (error) {
-    return buildFallbackPayload(question, rawText);
-  }
 }
 
 async function fetchGeminiResponse(question) {
@@ -547,74 +469,7 @@ async function fetchTopicImage(question, tutorPayload) {
     }
   }
 
-  if (!process.env.GEMINI_API_KEY) {
-    return null;
-  }
-
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${DEFAULT_GEMINI_IMAGE_MODEL}:generateContent`;
-  const imagePrompt = buildImagePrompt(question, tutorPayload);
-
-  const apiResponse = await fetch(endpoint, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-goog-api-key': process.env.GEMINI_API_KEY
-    },
-    body: JSON.stringify({
-      contents: [
-        {
-          role: 'user',
-          parts: [{ text: imagePrompt }]
-        }
-      ],
-      generationConfig: {
-        responseModalities: ['TEXT', 'IMAGE']
-      }
-    }),
-    signal: AbortSignal.timeout(45000)
-  });
-
-  const payload = await apiResponse.json().catch(() => ({}));
-
-  if (!apiResponse.ok) {
-    const message =
-      payload.error && payload.error.message
-        ? payload.error.message
-        : `Gemini image request failed with status ${apiResponse.status}.`;
-    throw new Error(message);
-  }
-
-  const parts =
-    payload &&
-    Array.isArray(payload.candidates) &&
-    payload.candidates[0] &&
-    payload.candidates[0].content &&
-    Array.isArray(payload.candidates[0].content.parts)
-      ? payload.candidates[0].content.parts
-      : [];
-
-  const imagePart = parts.find(
-    (part) =>
-      part &&
-      part.inlineData &&
-      typeof part.inlineData.data === 'string' &&
-      typeof part.inlineData.mimeType === 'string'
-  );
-
-  const textPart = parts.find((part) => part && typeof part.text === 'string');
-
-  if (!imagePart) {
-    if (textPart && textPart.text) {
-      throw new Error(textPart.text);
-    }
-    return null;
-  }
-
-  return {
-    source: 'generated',
-    mimeType: imagePart.inlineData.mimeType,
-    dataUrl: `data:${imagePart.inlineData.mimeType};base64,${imagePart.inlineData.data}`
-  };
+  return null;
 }
 
 async function fetchHuggingFaceImage(question, tutorPayload) {

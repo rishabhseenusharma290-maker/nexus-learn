@@ -9,7 +9,7 @@
   "engines": {
     "node": ">=18"
   },
-  "keywords": ["education", "3d", "canvas", "openai"],
+  "keywords": ["education", "3d", "canvas", "gemini"],
   "author": "",
   "license": "MIT"
 }
